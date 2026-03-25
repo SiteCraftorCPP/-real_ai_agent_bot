@@ -57,9 +57,9 @@ def reset_to_bundled() -> None:
 def can_edit_prompt(user_id: int, username: str | None) -> bool:
     """
     Кто может править промпт через Telegram.
-    - Главный админ (ADMIN_CHAT_ID) всегда.
-    - Если в .env задан PROMPT_ADMIN_USERNAMES — только эти @username + главный админ.
-    - Если PROMPT_ADMIN_USERNAMES пуст — как обычный is_admin (ADMIN_USERNAMES + БД).
+    - Любой user_id из ADMIN_CHAT_IDS.
+    - Если задан PROMPT_ADMIN_USERNAMES — только эти @username + совпадение по ID выше.
+    - Если PROMPT_ADMIN_USERNAMES пуст — как обычный is_admin (username в .env/БД).
     """
     from bot.config import Config
 

@@ -70,7 +70,8 @@ nano .env
 
 ```env
 BOT_TOKEN=your_bot_token_here
-ADMIN_CHAT_ID=0
+ADMIN_CHAT_IDS=123456789,987654321
+ADMIN_USERNAMES=admin1,admin2
 LOGO_PATH=assets/logo.png
 
 # LLM Provider selection (proxyapi or openrouter)

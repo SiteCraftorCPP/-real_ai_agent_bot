@@ -293,7 +293,7 @@ async def send_specialist_request_with_history(
         state: FSM context
         user_id: Telegram user ID
         username: Telegram username
-        chat_id: Target chat ID (ADMIN_CHAT_ID)
+        chat_id: Target chat ID (admin private chat)
         section: Section name (optional)
     """
     try:
@@ -402,29 +402,38 @@ async def handle_details(message: Message, state: FSMContext) -> None:
     
     admin_message += f"Детали: {details}"
     
-    # Send to admin if configured
-    if Config.ADMIN_CHAT_ID > 0:
-        try:
-            await message.bot.send_message(Config.ADMIN_CHAT_ID, admin_message, parse_mode="HTML")
-            logger.info(f"Specialist request sent to admin {Config.ADMIN_CHAT_ID} from user {user_id}")
-            
-            # Отправляем файл с историей переписки
-            await send_specialist_request_with_history(
-                bot=message.bot,
-                state=state,
-                user_id=user_id,
-                username=username if username != "N/A" else None,
-                chat_id=Config.ADMIN_CHAT_ID,
-                section=selected_section
-            )
-            
+    # Send to all admins (IDs from .env: ADMIN_CHAT_IDS ∪ ADMIN_CHAT_ID)
+    admin_ids = [a for a in Config.ADMIN_CHAT_IDS if a > 0]
+    if admin_ids:
+        sent_ok = False
+        last_err = None
+        for aid in admin_ids:
+            try:
+                await message.bot.send_message(aid, admin_message, parse_mode="HTML")
+                logger.info(f"Specialist request sent to admin {aid} from user {user_id}")
+                await send_specialist_request_with_history(
+                    bot=message.bot,
+                    state=state,
+                    user_id=user_id,
+                    username=username if username != "N/A" else None,
+                    chat_id=aid,
+                    section=selected_section
+                )
+                sent_ok = True
+            except Exception as e:
+                last_err = e
+                logger.error(f"Failed to send specialist request to admin {aid}: {e}")
+        if sent_ok:
             user_response = SPECIALIST_DONE_USER
-        except Exception as e:
-            logger.error(f"Failed to send specialist request to admin: {e}")
-            logger.warning(f"ADMIN_CHAT_ID={Config.ADMIN_CHAT_ID} but send failed, treating as no admin")
+        else:
+            logger.warning(
+                "Could not notify any admin (ADMIN_CHAT_IDS=%s): %s",
+                admin_ids,
+                last_err,
+            )
             user_response = SPECIALIST_DONE_USER_NO_ADMIN
     else:
-        logger.warning(f"ADMIN_CHAT_ID not set (value: {Config.ADMIN_CHAT_ID}), request not sent to admin")
+        logger.warning("No admin IDs in .env (ADMIN_CHAT_IDS / ADMIN_CHAT_ID), request not sent to admins")
         user_response = SPECIALIST_DONE_USER_NO_ADMIN
     
     # Clear specialist state but preserve selected_section

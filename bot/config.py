@@ -31,6 +31,22 @@ def _parse_int_list(value: str) -> list[int]:
     return out
 
 
+def _merge_admin_chat_ids(parsed: list[int], legacy_single: int) -> list[int]:
+    """
+    Один список ID админов: значения из ADMIN_CHAT_IDS плюс legacy ADMIN_CHAT_ID (если задан).
+    Порядок: сначала ADMIN_CHAT_IDS слева направо, затем legacy, если его ещё не было.
+    """
+    out: list[int] = []
+    seen: set[int] = set()
+    for n in parsed:
+        if n and n not in seen:
+            seen.add(n)
+            out.append(n)
+    if legacy_single and legacy_single not in seen:
+        out.append(legacy_single)
+    return out
+
+
 def _get_int(name: str, default: int) -> int:
     """
     Read int from env; treat empty string as missing (use default).
@@ -49,13 +65,11 @@ class Config:
     """Bot configuration."""
     
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    # Legacy: один ID; сливается с ADMIN_CHAT_IDS в общий список (равные права у всех).
     ADMIN_CHAT_ID: int = _get_int("ADMIN_CHAT_ID", 0)
-    # Optional: second (and more) admins by user_id/chat_id.
-    # Example: ADMIN_CHAT_IDS=364593110,123456789
+    # Список админов по user_id (через запятую, сколько угодно). Пример: ADMIN_CHAT_IDS=111,222,333
     _ADMIN_CHAT_IDS_PARSED: list[int] = _parse_int_list(os.getenv("ADMIN_CHAT_IDS", ""))
-    ADMIN_CHAT_IDS: list[int] = (
-        _ADMIN_CHAT_IDS_PARSED if _ADMIN_CHAT_IDS_PARSED else ([ADMIN_CHAT_ID] if ADMIN_CHAT_ID else [])
-    )
+    ADMIN_CHAT_IDS: list[int] = _merge_admin_chat_ids(_ADMIN_CHAT_IDS_PARSED, ADMIN_CHAT_ID)
     FEEDBACK_CHAT_ID: int = _get_int("FEEDBACK_CHAT_ID", 0)
     # Topic IDs for supergroup (0 if not using topics)
     FEEDBACK_TOPIC_ID: int = _get_int("FEEDBACK_TOPIC_ID", 0)
@@ -67,7 +81,7 @@ class Config:
         if u.strip()
     ]
     # Кто может править CORE prompt через /admin → «Промпт GPT» (username без @, lower).
-    # Если пусто — правят те же, что и обычные админы (ADMIN_USERNAMES + БД + главный ADMIN_CHAT_ID).
+    # Если пусто — правят те же, что и обычные админы (ADMIN_CHAT_IDS + ADMIN_USERNAMES + БД).
     PROMPT_ADMIN_USERNAMES: list[str] = [
         u.strip().lstrip("@").lower()
         for u in os.getenv("PROMPT_ADMIN_USERNAMES", "").split(",")

@@ -147,7 +147,6 @@ def get_feedback_reasons_kb() -> InlineKeyboardMarkup:
 
 
 def get_admin_panel_kb(
-    is_main: bool = False,
     show_prompt: bool = False,
     prompt_only: bool = False,
 ) -> InlineKeyboardMarkup:
@@ -164,9 +163,7 @@ def get_admin_panel_kb(
     ]
     if show_prompt:
         buttons.append([InlineKeyboardButton(text="🤖 Промпт GPT (CORE)", callback_data="admin:prompt")])
-    # Only main admin can manage other admins
-    if is_main:
-        buttons.append([InlineKeyboardButton(text="👥 Управление админами", callback_data="admin:manage")])
+    buttons.append([InlineKeyboardButton(text="👥 Управление админами", callback_data="admin:manage")])
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

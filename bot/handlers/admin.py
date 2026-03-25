@@ -37,11 +37,6 @@ def is_admin(user_id: int, username: str | None = None) -> bool:
     return False
 
 
-def is_main_admin(user_id: int) -> bool:
-    """Check if user is the main admin (can manage other admins)."""
-    return user_id == Config.ADMIN_CHAT_ID
-
-
 def is_prompt_only_editor(user_id: int, username: str | None) -> bool:
     """Доступ к /admin только к промпту: в PROMPT_ADMIN_USERNAMES, но не полноценный админ."""
     return can_edit_prompt(user_id, username) and not is_admin(user_id, username)
@@ -158,7 +153,6 @@ async def handle_admin_panel(message: Message) -> None:
     await message.answer(
         "🔐 *Админ-панель*\n\nВыберите действие:",
         reply_markup=get_admin_panel_kb(
-            is_main=is_main_admin(uid),
             show_prompt=show_prompt,
             prompt_only=prompt_only,
         ),
@@ -233,7 +227,6 @@ async def cb_back(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         "🔐 *Админ-панель*\n\nВыберите действие:",
         reply_markup=get_admin_panel_kb(
-            is_main=is_main_admin(uid),
             show_prompt=show_prompt,
             prompt_only=prompt_only,
         ),
@@ -305,8 +298,8 @@ async def cb_export_all(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "admin:manage")
 async def cb_manage_admins(callback: CallbackQuery) -> None:
     """Show admin management menu."""
-    if not is_main_admin(callback.from_user.id):
-        await callback.answer("Только главный админ может управлять", show_alert=True)
+    if not is_admin(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
         return
     
     await callback.answer()
@@ -320,7 +313,7 @@ async def cb_manage_admins(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "admin:list")
 async def cb_list_admins(callback: CallbackQuery) -> None:
     """List all admins."""
-    if not is_main_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id, callback.from_user.username):
         await callback.answer("Нет доступа", show_alert=True)
         return
     
@@ -329,7 +322,10 @@ async def cb_list_admins(callback: CallbackQuery) -> None:
     admins = get_admins()
     
     text = "👥 *Список админов:*\n\n"
-    text += f"👑 Главный: ID {Config.ADMIN_CHAT_ID}\n"
+    if Config.ADMIN_CHAT_IDS:
+        text += "🆔 По ID из .env:\n"
+        for aid in Config.ADMIN_CHAT_IDS:
+            text += f"• {aid}\n"
     
     if Config.ADMIN_USERNAMES:
         text += f"\n📋 Из .env:\n"
@@ -349,7 +345,7 @@ async def cb_list_admins(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "admin:add")
 async def cb_add_admin_prompt(callback: CallbackQuery, state: FSMContext) -> None:
     """Prompt to add admin."""
-    if not is_main_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id, callback.from_user.username):
         await callback.answer("Нет доступа", show_alert=True)
         return
     
@@ -363,7 +359,7 @@ async def cb_add_admin_prompt(callback: CallbackQuery, state: FSMContext) -> Non
 @router.callback_query(F.data == "admin:remove")
 async def cb_remove_admin_prompt(callback: CallbackQuery, state: FSMContext) -> None:
     """Prompt to remove admin."""
-    if not is_main_admin(callback.from_user.id):
+    if not is_admin(callback.from_user.id, callback.from_user.username):
         await callback.answer("Нет доступа", show_alert=True)
         return
     
@@ -391,7 +387,7 @@ async def handle_add_admin(message: Message, state: FSMContext) -> None:
         await message.answer("Отменено.")
         return
     
-    if not is_main_admin(message.from_user.id):
+    if not is_admin(message.from_user.id, message.from_user.username):
         await state.clear()
         return
     
@@ -417,7 +413,7 @@ async def handle_remove_admin(message: Message, state: FSMContext) -> None:
         await message.answer("Отменено.")
         return
     
-    if not is_main_admin(message.from_user.id):
+    if not is_admin(message.from_user.id, message.from_user.username):
         await state.clear()
         return
     
