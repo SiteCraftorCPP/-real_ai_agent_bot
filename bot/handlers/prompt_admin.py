@@ -4,7 +4,7 @@ from __future__ import annotations
 import io
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -14,7 +14,6 @@ from bot.prompt_store import (
     SYSTEM_PROMPT_OVERRIDE_PATH,
     can_edit_prompt,
     get_core_prompt,
-    reset_to_bundled,
     save_core_prompt,
     uses_bundled_default,
 )
@@ -64,24 +63,6 @@ async def cb_prompt_menu(callback: CallbackQuery) -> None:
     )
 
 
-@router.callback_query(F.data == "admin:prompt:preview")
-async def cb_prompt_preview(callback: CallbackQuery) -> None:
-    if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    await callback.answer()
-    core = get_core_prompt()
-    n = 1500
-    head = core[:n]
-    tail = ""
-    if len(core) > n:
-        tail = (
-            f"\n\n… ещё {len(core) - n} символов — "
-            "«Показать целиком» или «Скачать .txt»."
-        )
-    await callback.message.answer(f"📄 Начало промпта (первые {min(n, len(core))} символов):\n\n{head}{tail}")
-
-
 @router.callback_query(F.data == "admin:prompt:full")
 async def cb_prompt_full(callback: CallbackQuery) -> None:
     if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
@@ -121,40 +102,6 @@ async def cb_prompt_edit(callback: CallbackQuery, state: FSMContext) -> None:
         f"Ограничение: до {MAX_PROMPT_CHARS} символов.\n"
         "Отмена: /cancel",
     )
-
-
-@router.callback_query(F.data == "admin:prompt:reset")
-async def cb_prompt_reset_confirm(callback: CallbackQuery) -> None:
-    if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    await callback.answer()
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Да, сбросить", callback_data="admin:prompt:reset:yes"),
-                InlineKeyboardButton(text="« Назад", callback_data="admin:prompt"),
-            ]
-        ]
-    )
-    await callback.message.answer(
-        "Сбросить переопределение и снова использовать встроенный CORE из bot/texts.py?",
-        reply_markup=kb,
-    )
-
-
-@router.callback_query(F.data == "admin:prompt:reset:yes")
-async def cb_prompt_reset_yes(callback: CallbackQuery) -> None:
-    if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    await callback.answer()
-    try:
-        reset_to_bundled()
-        await callback.message.answer("✅ Сброшено. Активен встроенный CORE из кода.")
-    except OSError as e:
-        logger.error("reset prompt: %s", e, exc_info=True)
-        await callback.message.answer(f"❌ Ошибка: {e}")
 
 
 @router.callback_query(F.data == "admin:prompt:back")

@@ -172,11 +172,9 @@ def get_prompt_admin_kb() -> InlineKeyboardMarkup:
     """Меню управления CORE system prompt."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Превью (начало)", callback_data="admin:prompt:preview")],
             [InlineKeyboardButton(text="📜 Показать целиком", callback_data="admin:prompt:full")],
             [InlineKeyboardButton(text="📥 Скачать .txt", callback_data="admin:prompt:download")],
             [InlineKeyboardButton(text="✏️ Заменить", callback_data="admin:prompt:edit")],
-            [InlineKeyboardButton(text="🔄 Сбросить к дефолту", callback_data="admin:prompt:reset")],
             [InlineKeyboardButton(text="« В админ-панель", callback_data="admin:prompt:back")],
         ]
     )
