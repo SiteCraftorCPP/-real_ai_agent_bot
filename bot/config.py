@@ -31,21 +31,35 @@ def _parse_int_list(value: str) -> list[int]:
     return out
 
 
+def _get_int(name: str, default: int) -> int:
+    """
+    Read int from env; treat empty string as missing (use default).
+    Prevents crashes like: int('') -> ValueError.
+    """
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    raw = str(raw).strip()
+    if raw == "":
+        return default
+    return int(raw)
+
+
 class Config:
     """Bot configuration."""
     
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
-    ADMIN_CHAT_ID: int = int(os.getenv("ADMIN_CHAT_ID", "0"))
+    ADMIN_CHAT_ID: int = _get_int("ADMIN_CHAT_ID", 0)
     # Optional: second (and more) admins by user_id/chat_id.
     # Example: ADMIN_CHAT_IDS=364593110,123456789
     _ADMIN_CHAT_IDS_PARSED: list[int] = _parse_int_list(os.getenv("ADMIN_CHAT_IDS", ""))
     ADMIN_CHAT_IDS: list[int] = (
         _ADMIN_CHAT_IDS_PARSED if _ADMIN_CHAT_IDS_PARSED else ([ADMIN_CHAT_ID] if ADMIN_CHAT_ID else [])
     )
-    FEEDBACK_CHAT_ID: int = int(os.getenv("FEEDBACK_CHAT_ID", "0"))
+    FEEDBACK_CHAT_ID: int = _get_int("FEEDBACK_CHAT_ID", 0)
     # Topic IDs for supergroup (0 if not using topics)
-    FEEDBACK_TOPIC_ID: int = int(os.getenv("FEEDBACK_TOPIC_ID", "0"))
-    LEADS_TOPIC_ID: int = int(os.getenv("LEADS_TOPIC_ID", "0"))
+    FEEDBACK_TOPIC_ID: int = _get_int("FEEDBACK_TOPIC_ID", 0)
+    LEADS_TOPIC_ID: int = _get_int("LEADS_TOPIC_ID", 0)
     # Список админов через запятую: @user1,@user2 или user1,user2
     ADMIN_USERNAMES: list[str] = [
         u.strip().lstrip("@").lower() 
@@ -70,7 +84,7 @@ class Config:
     PROXYAPI_API_KEY: str = os.getenv("PROXYAPI_API_KEY", "")
     PROXYAPI_BASE_URL: str = os.getenv("PROXYAPI_BASE_URL", "https://openai.api.proxyapi.ru/v1")
     PROXYAPI_MODEL: str = os.getenv("PROXYAPI_MODEL", "openai/gpt-5.1-chat-latest")
-    PROXYAPI_MAX_TOKENS: int = int(os.getenv("PROXYAPI_MAX_TOKENS", "4000"))
+    PROXYAPI_MAX_TOKENS: int = _get_int("PROXYAPI_MAX_TOKENS", 4000)
     
     # OpenRouter configuration (опционально, для отката)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
@@ -78,7 +92,7 @@ class Config:
     OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     OPENROUTER_SITE_URL: str = os.getenv("OPENROUTER_SITE_URL", "http://localhost")
     OPENROUTER_APP_NAME: str = os.getenv("OPENROUTER_APP_NAME", "Active Group Realty Bot")
-    OPENROUTER_MAX_TOKENS: int = int(os.getenv("OPENROUTER_MAX_TOKENS", "1500"))
+    OPENROUTER_MAX_TOKENS: int = _get_int("OPENROUTER_MAX_TOKENS", 1500)
     
     # LLM Provider selection
     # Определение провайдера по умолчанию:
@@ -94,8 +108,8 @@ class Config:
     
     # Bot Configuration
     BOT_VERSION: str = os.getenv("BOT_VERSION", "1.3.5")
-    SESSION_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
-    MAX_CONTEXT_MESSAGES: int = int(os.getenv("MAX_CONTEXT_MESSAGES", "50"))
+    SESSION_TIMEOUT_MINUTES: int = _get_int("SESSION_TIMEOUT_MINUTES", 60)
+    MAX_CONTEXT_MESSAGES: int = _get_int("MAX_CONTEXT_MESSAGES", 50)
     
     # Feature Flags
     ENABLE_ANALYTICS: bool = os.getenv("ENABLE_ANALYTICS", "true").lower() == "true"
@@ -104,18 +118,18 @@ class Config:
     
     # Orchestrator Settings (v1.3.1)
     ESCALATION_ENABLED: bool = os.getenv("ESCALATION_ENABLED", "true").lower() == "true"
-    ESCALATION_MIN_MESSAGES: int = int(os.getenv("ESCALATION_MIN_MESSAGES", "5"))
+    ESCALATION_MIN_MESSAGES: int = _get_int("ESCALATION_MIN_MESSAGES", 5)
     ORCHESTRATOR_ENABLED: bool = os.getenv("ORCHESTRATOR_ENABLED", "true").lower() == "true"
     
     # Rate Limiting (v1.3.2)
-    DAILY_MESSAGE_LIMIT: int = int(os.getenv("DAILY_MESSAGE_LIMIT", "40"))
-    RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "5"))
+    DAILY_MESSAGE_LIMIT: int = _get_int("DAILY_MESSAGE_LIMIT", 40)
+    RATE_LIMIT_PER_MINUTE: int = _get_int("RATE_LIMIT_PER_MINUTE", 5)
     
     # Escalation Limits (v1.3.2)
-    ESCALATION_MAX_PER_DAY: int = int(os.getenv("ESCALATION_MAX_PER_DAY", "2"))
-    ESCALATION_COOLDOWN_HOURS: int = int(os.getenv("ESCALATION_COOLDOWN_HOURS", "12"))
+    ESCALATION_MAX_PER_DAY: int = _get_int("ESCALATION_MAX_PER_DAY", 2)
+    ESCALATION_COOLDOWN_HOURS: int = _get_int("ESCALATION_COOLDOWN_HOURS", 12)
     # Escalation Button Settings (v1.3.3)
-    ESCALATION_BUTTON_COOLDOWN_MESSAGES: int = int(os.getenv("ESCALATION_BUTTON_COOLDOWN_MESSAGES", "10"))
+    ESCALATION_BUTTON_COOLDOWN_MESSAGES: int = _get_int("ESCALATION_BUTTON_COOLDOWN_MESSAGES", 10)
     
     @classmethod
     def validate(cls) -> None:
