@@ -1,0 +1,35 @@
+# Secrets / local config
+.env
+.env.*
+
+# Python env
+.venv/
+venv/
+
+# Caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs / runtime
+*.log
+*.session
+
+# SQLite / bot DB
+*.db
+*.sqlite*
+bot.db
+bot_database.db
+data/*.db
+data/*.sqlite*
+
+# Editor / OS
+.vscode/
+.idea/
+AppData/
+
+# Cursor internal (keep repo clean)
+.cursor/
+.cursorignore
+
