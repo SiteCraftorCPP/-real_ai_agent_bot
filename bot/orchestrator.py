@@ -834,6 +834,16 @@ def process_response(
     
     result = raw_response
     updated_context = context.copy()
+
+    # 0.2. Маркер-кнопка эскалации от модели: превращаем в настоящую inline-кнопку.
+    # Модель иногда печатает "[Подключить специалиста]" — это должно быть UI, не текст.
+    escalation_marker_found = False
+    marker_pattern = r"\[\s*подключить\s+специалиста\s*\]"
+    if re.search(marker_pattern, result, re.IGNORECASE):
+        escalation_marker_found = True
+        result = re.sub(marker_pattern, "", result, flags=re.IGNORECASE)
+        # подчистим лишние пустые строки после вырезания
+        result = re.sub(r"\n{3,}", "\n\n", result).strip()
     
     # 0. Блокировка инструкций по классифайдам (полная замена ответа)
     if contains_classifieds_instructions(result):
@@ -884,9 +894,15 @@ def process_response(
     
     should_show_button = False
     escalation_reason = None
+
+    # Если маркер есть — форсим кнопку (если пользователь не отказывался).
+    if escalation_marker_found and not escalation_data.get("user_declined", False):
+        should_show_button = True
+        escalation_reason = "llm_marker"
+        logger.info(f"Forced escalation button due to LLM marker (user {user_id})")
     
     # v1.3.4: При числовой оценке — принудительная кнопка эскалации
-    if has_numeric_estimate:
+    if has_numeric_estimate and not should_show_button:
         should_show_button = True
         escalation_reason = "pricing"
         logger.info(f"Forced escalation button for numeric estimate (user {user_id})")
