@@ -1,10 +1,12 @@
 """LLM integration with ProxyAPI and OpenRouter."""
 import logging
 import asyncio
+import re
 from openai import AsyncOpenAI
 from openai import PermissionDeniedError, APIError
 from bot.config import Config
 from bot.errors import APITimeoutError, RateLimitError, InvalidInputError
+from bot.prompt_dynamic_store import get_dynamic_block, get_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -36,42 +38,6 @@ if openrouter_key_initial:
 FALLBACK_MESSAGE = "Сервис временно недоступен, попробуйте позже."
 
 
-import re
-
-# Паттерны для определения типа запроса (v1.3.4 Dynamic Blocks)
-PRICING_PATTERNS = [
-    r"цен[аыу]", r"стоимост", r"сколько\s+стоит", r"оцен",
-    r"₽", r"руб", r"млн", r"тыс", r"м²", r"кв\.?\s*м",
-    r"бюджет", r"за\s+сколько", r"почём", r"дорого", r"дёшево",
-    r"выгодн", r"торг", r"скидк"
-]
-
-RISKS_DOCS_PATTERNS = [
-    r"договор", r"контракт", r"документ", r"риск", r"налог",
-    r"провер", r"ипотек", r"обремен", r"залог", r"собственн",
-    r"юрид", r"право", r"регистрац", r"сделк", r"нотариус",
-    r"выписк", r"егрн", r"кадастр", r"справк"
-]
-
-FEEDBACK_PATTERNS = [
-    r"некорректн", r"ошибк", r"не\s+так", r"неверн", r"неправильн",
-    r"не\s+точн", r"не\s+соглас", r"👎", r"исправ"
-]
-
-# v1.3.4: Паттерны для определения specialist intent
-SPECIALIST_LLM_PATTERNS = [
-    r"(?:нужен|нужна|хочу|дай)\s+(?:консультант|специалист|эксперт|человек)",
-    r"подключи\w*\s+(?:специалист|консультант|эксперт)",
-    r"кто\s+может\s+помочь",
-    r"кому\s+обратиться",
-    r"к\s+кому\s+обратиться",
-    r"более\s+точн\w+\s+оценк",
-    r"(?:нужна|хочу|можно)\s+консультаци",
-    r"(?:свяжите|соедините|подключите)\s+(?:меня\s+)?(?:с|со)\s+(?:специалист|консультант|эксперт)",
-    r"(?:помоги|помогите)\s+(?:связаться|найти)\s+(?:специалист|консультант)",
-]
-
-
 def detect_request_type(user_text: str, is_feedback_mode: bool = False) -> list[str]:
     """
     Определить тип запроса для подключения динамических блоков v1.3.4.
@@ -84,6 +50,14 @@ def detect_request_type(user_text: str, is_feedback_mode: bool = False) -> list[
     Returns:
         Список типов запроса: ['pricing'], ['risks_docs'], ['feedback'], ['specialist_request'], или комбинация
     """
+    cfg = get_runtime_config()
+    patterns = cfg.get("patterns", {})
+    feedback_patterns = patterns.get("feedback", [])
+    pricing_patterns = patterns.get("pricing", [])
+    risks_docs_patterns = patterns.get("risks_docs", [])
+    specialist_patterns = patterns.get("specialist_request", [])
+    order = cfg.get("priority_order", ["feedback", "pricing", "risks_docs", "specialist_request"])
+
     types = []
     text_lower = user_text.lower()
     
@@ -91,28 +65,25 @@ def detect_request_type(user_text: str, is_feedback_mode: bool = False) -> list[
     if is_feedback_mode:
         types.append("feedback")
     else:
-        for pattern in FEEDBACK_PATTERNS:
+        for pattern in feedback_patterns:
             if re.search(pattern, text_lower, re.IGNORECASE):
                 types.append("feedback")
                 break
-    
-    # Проверка на pricing mode (приоритет 2)
-    for pattern in PRICING_PATTERNS:
-        if re.search(pattern, text_lower, re.IGNORECASE):
-            types.append("pricing")
-            break
-    
-    # Проверка на risks/docs mode (приоритет 3)
-    for pattern in RISKS_DOCS_PATTERNS:
-        if re.search(pattern, text_lower, re.IGNORECASE):
-            types.append("risks_docs")
-            break
-    
-    # v1.3.4: Проверка на specialist_request (приоритет 4)
-    for pattern in SPECIALIST_LLM_PATTERNS:
-        if re.search(pattern, text_lower, re.IGNORECASE):
-            types.append("specialist_request")
-            break
+
+    checks = {
+        "pricing": pricing_patterns,
+        "risks_docs": risks_docs_patterns,
+        "specialist_request": specialist_patterns,
+    }
+    for key in order:
+        if key == "feedback":
+            continue
+        for pattern in checks.get(key, []):
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                types.append(key)
+                break
+        if key in types:
+            continue
     
     return types
 
@@ -134,13 +105,6 @@ def build_system_prompt(
     Returns:
         Системный промпт с добавленным контекстом и динамическими блоками
     """
-    from bot.texts import (
-        BLOCK_PRICING_V1_3_4,
-        BLOCK_RISKS_DOCS_V1_3_4,
-        BLOCK_FEEDBACK_V1_3_4,
-        BLOCK_SPECIALIST_REQUEST_V1_3_4,
-        BLOCK_CONTEXT_REMINDER_V1_3_4
-    )
     from bot.orchestrator import build_slots_summary
     from bot.prompt_store import get_core_prompt
 
@@ -150,16 +114,22 @@ def build_system_prompt(
     dynamic_blocks = ""
     if user_text:
         request_types = detect_request_type(user_text, is_feedback_mode)
-        
-        # Приоритет: feedback -> pricing -> risks_docs -> specialist_request
-        if "feedback" in request_types:
-            dynamic_blocks += BLOCK_FEEDBACK_V1_3_4
-        if "pricing" in request_types:
-            dynamic_blocks += BLOCK_PRICING_V1_3_4
-        if "risks_docs" in request_types:
-            dynamic_blocks += BLOCK_RISKS_DOCS_V1_3_4
-        if "specialist_request" in request_types:
-            dynamic_blocks += BLOCK_SPECIALIST_REQUEST_V1_3_4
+        order = get_runtime_config().get("priority_order", ["feedback", "pricing", "risks_docs", "specialist_request"])
+        block_map = {
+            "feedback": "feedback",
+            "pricing": "pricing",
+            "risks_docs": "risks_docs",
+            "specialist_request": "specialist_request",
+        }
+        seen = set()
+        for key in order:
+            if key in request_types and key in block_map:
+                dynamic_blocks += get_dynamic_block(block_map[key])
+                seen.add(key)
+        # fallback: если в order забыли какой-то тип, всё равно подключим его
+        for key in ("feedback", "pricing", "risks_docs", "specialist_request"):
+            if key in request_types and key not in seen:
+                dynamic_blocks += get_dynamic_block(block_map[key])
         
         if dynamic_blocks:
             logger.debug(f"Подключены динамические блоки: {request_types}")
@@ -196,7 +166,7 @@ def build_system_prompt(
     # Подключаем BLOCK_CONTEXT_REMINDER если контекст "теряется"
     context_lost = context.get("context_lost", False)
     if context_lost:
-        dynamic_blocks += BLOCK_CONTEXT_REMINDER_V1_3_4
+        dynamic_blocks += get_dynamic_block("context_reminder")
         logger.debug("Подключен блок CONTEXT_REMINDER (потеря контекста)")
     
     return base_prompt + dynamic_blocks + context_addition

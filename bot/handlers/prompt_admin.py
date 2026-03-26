@@ -4,11 +4,17 @@ from __future__ import annotations
 import io
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, BufferedInputFile
+from aiogram.types import Message, CallbackQuery, BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from bot.keyboards import get_prompt_admin_kb, get_admin_panel_kb
+from bot.keyboards import get_prompt_admin_kb, get_admin_panel_kb, get_prompt_dynamic_kb
+from bot.prompt_dynamic_store import (
+    get_dynamic_block,
+    save_dynamic_block,
+    get_runtime_config_pretty,
+    save_runtime_config_from_text,
+)
 from bot.prompt_store import (
     MAX_PROMPT_CHARS,
     SYSTEM_PROMPT_OVERRIDE_PATH,
@@ -27,6 +33,17 @@ TELEGRAM_TEXT_LIMIT = 4000
 
 class PromptAdminStates(StatesGroup):
     waiting_new_prompt = State()
+    waiting_dyn_text = State()
+
+
+DYN_KEY_MAP = {
+    "fb": "feedback",
+    "pr": "pricing",
+    "rd": "risks_docs",
+    "sp": "specialist_request",
+    "cr": "context_reminder",
+    "rc": "runtime_config",
+}
 
 
 def _split_for_telegram(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list[str]:
@@ -121,8 +138,77 @@ async def cb_prompt_back(callback: CallbackQuery) -> None:
     )
 
 
+@router.callback_query(F.data == "admin:prompt:dyn")
+async def cb_prompt_dyn_menu(callback: CallbackQuery) -> None:
+    if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.edit_text(
+        "⚙️ Динамика LLM\n\nВыберите блок/конфиг для просмотра и редактирования:",
+        reply_markup=get_prompt_dynamic_kb(),
+    )
+
+
+@router.callback_query(F.data.startswith("admin:prompt:dyn:full:"))
+async def cb_prompt_dyn_full(callback: CallbackQuery) -> None:
+    if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    short_key = callback.data.rsplit(":", 1)[-1]
+    item = DYN_KEY_MAP.get(short_key)
+    if not item:
+        await callback.answer("Неизвестный элемент", show_alert=True)
+        return
+    await callback.answer("Отправляю…")
+    if item == "runtime_config":
+        text = get_runtime_config_pretty()
+        title = "Runtime JSON (patterns + priority)"
+    else:
+        text = get_dynamic_block(item)
+        title = f"BLOCK: {item}"
+    for i, chunk in enumerate(_split_for_telegram(text)):
+        prefix = f"📄 {title} | часть {i + 1}\n\n"
+        await callback.message.answer(prefix + chunk)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin:prompt:dyn:edit:{short_key}")],
+            [InlineKeyboardButton(text="« Назад к динамике", callback_data="admin:prompt:dyn")],
+        ]
+    )
+    await callback.message.answer("Что дальше?", reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("admin:prompt:dyn:edit:"))
+async def cb_prompt_dyn_edit(callback: CallbackQuery, state: FSMContext) -> None:
+    if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    short_key = callback.data.rsplit(":", 1)[-1]
+    item = DYN_KEY_MAP.get(short_key)
+    if not item:
+        await callback.answer("Неизвестный элемент", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(PromptAdminStates.waiting_dyn_text)
+    await state.update_data(dyn_key=short_key)
+    tip = "Пришлите новый текст сообщением или файлом .txt/.md (UTF-8)."
+    if item == "runtime_config":
+        tip = "Пришлите валидный JSON с полями: priority_order и patterns."
+    await callback.message.answer(f"✏️ Редактирование: `{item}`\n\n{tip}\nОтмена: /cancel", parse_mode="Markdown")
+
+
 @router.message(PromptAdminStates.waiting_new_prompt, F.text == "/cancel")
 async def prompt_edit_cancel(message: Message, state: FSMContext) -> None:
+    if not can_edit_prompt(message.from_user.id, message.from_user.username):
+        await state.clear()
+        return
+    await state.clear()
+    await message.answer("Отменено.")
+
+
+@router.message(PromptAdminStates.waiting_dyn_text, F.text == "/cancel")
+async def dyn_edit_cancel(message: Message, state: FSMContext) -> None:
     if not can_edit_prompt(message.from_user.id, message.from_user.username):
         await state.clear()
         return
@@ -146,6 +232,34 @@ async def prompt_edit_text(message: Message, state: FSMContext) -> None:
         return
     await state.clear()
     await message.answer(f"✅ CORE prompt сохранён ({len(text.strip())} символов). Изменения применяются сразу.")
+
+
+@router.message(PromptAdminStates.waiting_dyn_text, F.text)
+async def dyn_edit_text(message: Message, state: FSMContext) -> None:
+    if not can_edit_prompt(message.from_user.id, message.from_user.username):
+        await state.clear()
+        return
+    data = await state.get_data()
+    short_key = data.get("dyn_key")
+    item = DYN_KEY_MAP.get(short_key or "")
+    if not item:
+        await state.clear()
+        await message.answer("❌ Не удалось определить элемент редактирования.")
+        return
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("Пустой текст. Пришлите данные или /cancel.")
+        return
+    try:
+        if item == "runtime_config":
+            save_runtime_config_from_text(text)
+        else:
+            save_dynamic_block(item, text)
+    except ValueError as e:
+        await message.answer(f"❌ {e}")
+        return
+    await state.clear()
+    await message.answer(f"✅ Сохранено: {item}. Применяется сразу.")
 
 
 @router.message(PromptAdminStates.waiting_new_prompt, F.document)
@@ -188,3 +302,50 @@ async def prompt_edit_document(message: Message, state: FSMContext, bot: Bot) ->
 
     await state.clear()
     await message.answer(f"✅ CORE prompt загружен из файла ({len(text.strip())} символов).")
+
+
+@router.message(PromptAdminStates.waiting_dyn_text, F.document)
+async def dyn_edit_document(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not can_edit_prompt(message.from_user.id, message.from_user.username):
+        await state.clear()
+        return
+    data = await state.get_data()
+    short_key = data.get("dyn_key")
+    item = DYN_KEY_MAP.get(short_key or "")
+    if not item:
+        await state.clear()
+        await message.answer("❌ Не удалось определить элемент редактирования.")
+        return
+    doc = message.document
+    if not doc:
+        return
+    if doc.file_size and doc.file_size > 2 * 1024 * 1024:
+        await message.answer("❌ Файл слишком большой (макс. 2 МБ).")
+        return
+    file_name = (doc.file_name or "").lower()
+    if file_name and not (file_name.endswith(".txt") or file_name.endswith(".md") or file_name.endswith(".json")):
+        await message.answer("❌ Пришлите `.txt` / `.md` / `.json`.")
+        return
+    buf = io.BytesIO()
+    try:
+        await bot.download(doc, destination=buf)
+    except Exception as e:
+        logger.error("download dynamic file: %s", e, exc_info=True)
+        await message.answer("❌ Не удалось скачать файл.")
+        return
+    raw = buf.getvalue()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        await message.answer("❌ Неверная кодировка. Сохраните файл как UTF-8.")
+        return
+    try:
+        if item == "runtime_config":
+            save_runtime_config_from_text(text)
+        else:
+            save_dynamic_block(item, text)
+    except ValueError as e:
+        await message.answer(f"❌ {e}")
+        return
+    await state.clear()
+    await message.answer(f"✅ Сохранено из файла: {item}.")

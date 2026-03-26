@@ -175,7 +175,23 @@ def get_prompt_admin_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📜 Показать целиком", callback_data="admin:prompt:full")],
             [InlineKeyboardButton(text="📥 Скачать .txt", callback_data="admin:prompt:download")],
             [InlineKeyboardButton(text="✏️ Заменить", callback_data="admin:prompt:edit")],
+            [InlineKeyboardButton(text="⚙️ Динамика LLM", callback_data="admin:prompt:dyn")],
             [InlineKeyboardButton(text="« В админ-панель", callback_data="admin:prompt:back")],
+        ]
+    )
+
+
+def get_prompt_dynamic_kb() -> InlineKeyboardMarkup:
+    """Меню редактирования динамических блоков и runtime-конфига."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🧩 BLOCK_FEEDBACK", callback_data="admin:prompt:dyn:full:fb")],
+            [InlineKeyboardButton(text="💸 BLOCK_PRICING", callback_data="admin:prompt:dyn:full:pr")],
+            [InlineKeyboardButton(text="⚖️ BLOCK_RISKS_DOCS", callback_data="admin:prompt:dyn:full:rd")],
+            [InlineKeyboardButton(text="👤 BLOCK_SPECIALIST_REQUEST", callback_data="admin:prompt:dyn:full:sp")],
+            [InlineKeyboardButton(text="🧠 BLOCK_CONTEXT_REMINDER", callback_data="admin:prompt:dyn:full:cr")],
+            [InlineKeyboardButton(text="🔎 Runtime JSON (patterns+priority)", callback_data="admin:prompt:dyn:full:rc")],
+            [InlineKeyboardButton(text="« Назад к CORE", callback_data="admin:prompt")],
         ]
     )
 
