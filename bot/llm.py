@@ -10,6 +10,13 @@ from bot.prompt_dynamic_store import get_dynamic_block, get_runtime_config
 
 logger = logging.getLogger(__name__)
 
+# Backward compatibility: orchestrator imports these constants.
+_rt_patterns = get_runtime_config().get("patterns", {})
+PRICING_PATTERNS = _rt_patterns.get("pricing", [])
+RISKS_DOCS_PATTERNS = _rt_patterns.get("risks_docs", [])
+FEEDBACK_PATTERNS = _rt_patterns.get("feedback", [])
+SPECIALIST_LLM_PATTERNS = _rt_patterns.get("specialist_request", [])
+
 # Initialize ProxyAPI client
 proxyapi_key_initial = Config.PROXYAPI_API_KEY.strip() if Config.PROXYAPI_API_KEY else ""
 proxyapi_client = None
