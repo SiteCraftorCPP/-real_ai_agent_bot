@@ -26,7 +26,7 @@ from bot.handlers.admin import is_admin, is_prompt_only_editor
 logger = logging.getLogger(__name__)
 router = Router()
 
-TELEGRAM_TEXT_LIMIT = 4000
+TELEGRAM_TEXT_LIMIT = 4096
 
 
 class PromptAdminStates(StatesGroup):
@@ -46,6 +46,20 @@ def _split_for_telegram(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list[str
     if not text:
         return ["(пусто)"]
     return [text[i : i + limit] for i in range(0, len(text), limit)]
+
+
+def _split_with_prefix(text: str, prefix_template: str) -> list[str]:
+    """
+    Разбивка с учетом префикса, чтобы prefix+chunk никогда не превышал лимит Telegram.
+    Делаем консервативно: считаем худший префикс (с большими цифрами) и оставляем запас.
+    """
+    # worst-case numbers to size prefix: assume up to 3 digits per part count
+    worst_prefix = prefix_template.format(i=999, n=999)
+    safety = 8
+    payload_limit = max(500, TELEGRAM_TEXT_LIMIT - len(worst_prefix) - safety)
+    if not text:
+        return ["(пусто)"]
+    return [text[i : i + payload_limit] for i in range(0, len(text), payload_limit)]
 
 
 def _prompt_status_line() -> str:
@@ -83,9 +97,10 @@ async def cb_prompt_full(callback: CallbackQuery) -> None:
         return
     await callback.answer("Отправляю частями…")
     core = get_core_prompt()
-    chunks = _split_for_telegram(core)
+    prefix_tmpl = "📄 CORE system prompt | часть {i}/{n}\n\n"
+    chunks = _split_with_prefix(core, prefix_tmpl)
     for i, chunk in enumerate(chunks):
-        prefix = f"📄 CORE system prompt | часть {i + 1}/{len(chunks)}\n\n"
+        prefix = prefix_tmpl.format(i=i + 1, n=len(chunks))
         await callback.message.answer(prefix + chunk)
 
 
@@ -159,9 +174,10 @@ async def cb_prompt_dyn_full(callback: CallbackQuery) -> None:
         return
     await callback.answer("Отправляю частями…")
     text = get_dynamic_block(item)
-    chunks = _split_for_telegram(text)
+    prefix_tmpl = f"📄 BLOCK: {item} | часть {{i}}/{{n}}\n\n"
+    chunks = _split_with_prefix(text, prefix_tmpl)
     for i, chunk in enumerate(chunks):
-        prefix = f"📄 BLOCK: {item} | часть {i + 1}/{len(chunks)}\n\n"
+        prefix = prefix_tmpl.format(i=i + 1, n=len(chunks))
         await callback.message.answer(prefix + chunk)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
