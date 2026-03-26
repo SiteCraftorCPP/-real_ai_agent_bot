@@ -41,7 +41,6 @@ DYN_KEY_MAP = {
     "pr": "pricing",
     "rd": "risks_docs",
     "sp": "specialist_request",
-    "cr": "context_reminder",
     "rc": "runtime_config",
 }
 
