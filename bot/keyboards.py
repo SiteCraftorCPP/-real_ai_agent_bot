@@ -172,6 +172,7 @@ def get_prompt_admin_kb() -> InlineKeyboardMarkup:
     """Меню управления CORE system prompt."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="👀 Показать в Telegram", callback_data="admin:prompt:full")],
             [InlineKeyboardButton(text="📥 Скачать .txt", callback_data="admin:prompt:download")],
             [InlineKeyboardButton(text="✏️ Заменить (только .txt)", callback_data="admin:prompt:edit")],
             [InlineKeyboardButton(text="⚙️ Динамика LLM", callback_data="admin:prompt:dyn")],

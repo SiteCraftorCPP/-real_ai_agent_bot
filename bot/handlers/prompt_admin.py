@@ -81,13 +81,12 @@ async def cb_prompt_full(callback: CallbackQuery) -> None:
     if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
         await callback.answer("Нет доступа", show_alert=True)
         return
-    # Telegram режет длинные сообщения — "полный показ" делаем файлом.
-    await callback.answer()
+    await callback.answer("Отправляю частями…")
     core = get_core_prompt()
-    await callback.message.answer_document(
-        BufferedInputFile(core.encode("utf-8"), filename="system_prompt_core_active.txt"),
-        caption="Текущий CORE system prompt (UTF-8).",
-    )
+    chunks = _split_for_telegram(core)
+    for i, chunk in enumerate(chunks):
+        prefix = f"📄 CORE system prompt | часть {i + 1}/{len(chunks)}\n\n"
+        await callback.message.answer(prefix + chunk)
 
 
 @router.callback_query(F.data == "admin:prompt:download")
@@ -158,13 +157,12 @@ async def cb_prompt_dyn_full(callback: CallbackQuery) -> None:
     if not item:
         await callback.answer("Неизвестный элемент", show_alert=True)
         return
-    await callback.answer()
+    await callback.answer("Отправляю частями…")
     text = get_dynamic_block(item)
-    filename = f"system_prompt_block_{item}.txt"
-    await callback.message.answer_document(
-        BufferedInputFile(text.encode("utf-8"), filename=filename),
-        caption=f"📄 BLOCK: {item} (UTF-8)",
-    )
+    chunks = _split_for_telegram(text)
+    for i, chunk in enumerate(chunks):
+        prefix = f"📄 BLOCK: {item} | часть {i + 1}/{len(chunks)}\n\n"
+        await callback.message.answer(prefix + chunk)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin:prompt:dyn:edit:{short_key}")],
