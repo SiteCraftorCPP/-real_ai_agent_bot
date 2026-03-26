@@ -81,11 +81,13 @@ async def cb_prompt_full(callback: CallbackQuery) -> None:
     if not can_edit_prompt(callback.from_user.id, callback.from_user.username):
         await callback.answer("Нет доступа", show_alert=True)
         return
-    await callback.answer("Отправляю частями…")
+    # Telegram режет длинные сообщения — "полный показ" делаем файлом.
+    await callback.answer()
     core = get_core_prompt()
-    for i, chunk in enumerate(_split_for_telegram(core)):
-        prefix = f"📄 Часть {i + 1}\n\n"
-        await callback.message.answer(prefix + chunk)
+    await callback.message.answer_document(
+        BufferedInputFile(core.encode("utf-8"), filename="system_prompt_core_active.txt"),
+        caption="Текущий CORE system prompt (UTF-8).",
+    )
 
 
 @router.callback_query(F.data == "admin:prompt:download")
@@ -111,7 +113,7 @@ async def cb_prompt_edit(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.set_state(PromptAdminStates.waiting_new_prompt)
     await callback.message.answer(
-        "✏️ Пришлите новый CORE prompt одним сообщением или файлом .txt / .md (UTF-8).\n\n"
+        "✏️ Пришлите новый CORE prompt ФАЙЛОМ `.txt` (UTF-8).\n\n"
         f"Ограничение: до {MAX_PROMPT_CHARS} символов.\n"
         "Отмена: /cancel",
     )
@@ -156,16 +158,13 @@ async def cb_prompt_dyn_full(callback: CallbackQuery) -> None:
     if not item:
         await callback.answer("Неизвестный элемент", show_alert=True)
         return
-    await callback.answer("Отправляю…")
+    await callback.answer()
     text = get_dynamic_block(item)
-    title = f"BLOCK: {item}"
-    chunks = _split_for_telegram(text)
-    if len(chunks) == 1:
-        await callback.message.answer(f"📄 {title}\n\n{chunks[0]}")
-    else:
-        for i, chunk in enumerate(chunks):
-            prefix = f"📄 {title} | часть {i + 1}\n\n"
-            await callback.message.answer(prefix + chunk)
+    filename = f"system_prompt_block_{item}.txt"
+    await callback.message.answer_document(
+        BufferedInputFile(text.encode("utf-8"), filename=filename),
+        caption=f"📄 BLOCK: {item} (UTF-8)",
+    )
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin:prompt:dyn:edit:{short_key}")],
@@ -188,7 +187,7 @@ async def cb_prompt_dyn_edit(callback: CallbackQuery, state: FSMContext) -> None
     await callback.answer()
     await state.set_state(PromptAdminStates.waiting_dyn_text)
     await state.update_data(dyn_key=short_key)
-    tip = "Пришлите новый текст сообщением или файлом .txt/.md (UTF-8)."
+    tip = "Пришлите файл `.txt` (UTF-8)."
     await callback.message.answer(f"✏️ Редактирование: `{item}`\n\n{tip}\nОтмена: /cancel", parse_mode="Markdown")
 
 
@@ -212,20 +211,11 @@ async def dyn_edit_cancel(message: Message, state: FSMContext) -> None:
 
 @router.message(PromptAdminStates.waiting_new_prompt, F.text)
 async def prompt_edit_text(message: Message, state: FSMContext) -> None:
+    # Загружать промпт текстом нельзя — Telegram может обрезать.
     if not can_edit_prompt(message.from_user.id, message.from_user.username):
         await state.clear()
         return
-    text = message.text or ""
-    if not text.strip():
-        await message.answer("Пустой текст. Пришлите промпт или /cancel.")
-        return
-    try:
-        save_core_prompt(text)
-    except ValueError as e:
-        await message.answer(f"❌ {e}")
-        return
-    await state.clear()
-    await message.answer(f"✅ CORE prompt сохранён ({len(text.strip())} символов). Изменения применяются сразу.")
+    await message.answer("❌ Пришлите файл `.txt` (UTF-8). Отмена: /cancel")
 
 
 @router.message(PromptAdminStates.waiting_dyn_text, F.text)
@@ -233,24 +223,7 @@ async def dyn_edit_text(message: Message, state: FSMContext) -> None:
     if not can_edit_prompt(message.from_user.id, message.from_user.username):
         await state.clear()
         return
-    data = await state.get_data()
-    short_key = data.get("dyn_key")
-    item = DYN_KEY_MAP.get(short_key or "")
-    if not item:
-        await state.clear()
-        await message.answer("❌ Не удалось определить элемент редактирования.")
-        return
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer("Пустой текст. Пришлите данные или /cancel.")
-        return
-    try:
-        save_dynamic_block(item, text)
-    except ValueError as e:
-        await message.answer(f"❌ {e}")
-        return
-    await state.clear()
-    await message.answer(f"✅ Сохранено: {item}. Применяется сразу.")
+    await message.answer("❌ Пришлите файл `.txt` (UTF-8). Отмена: /cancel")
 
 
 @router.message(PromptAdminStates.waiting_new_prompt, F.document)
@@ -266,8 +239,8 @@ async def prompt_edit_document(message: Message, state: FSMContext, bot: Bot) ->
         await message.answer("❌ Файл слишком большой (макс. 2 МБ).")
         return
     file_name = (doc.file_name or "").lower()
-    if file_name and not (file_name.endswith(".txt") or file_name.endswith(".md")):
-        await message.answer("❌ Пришлите `.txt` или `.md`, либо текстом в сообщении.")
+    if file_name and not file_name.endswith(".txt"):
+        await message.answer("❌ Пришлите `.txt` (UTF-8).")
         return
 
     buf = io.BytesIO()
@@ -314,8 +287,8 @@ async def dyn_edit_document(message: Message, state: FSMContext, bot: Bot) -> No
         await message.answer("❌ Файл слишком большой (макс. 2 МБ).")
         return
     file_name = (doc.file_name or "").lower()
-    if file_name and not (file_name.endswith(".txt") or file_name.endswith(".md")):
-        await message.answer("❌ Пришлите `.txt` / `.md`.")
+    if file_name and not file_name.endswith(".txt"):
+        await message.answer("❌ Пришлите `.txt` (UTF-8).")
         return
     buf = io.BytesIO()
     try:
