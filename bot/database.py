@@ -87,6 +87,16 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             onboarding_shown_at TEXT NOT NULL
         )
     """)
+
+    # Known forum topic ids (message_thread_id) per chat
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS known_forum_threads (
+            chat_id INTEGER NOT NULL,
+            thread_id INTEGER NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            PRIMARY KEY (chat_id, thread_id)
+        )
+    """)
     conn.commit()
 
 
@@ -653,5 +663,44 @@ def mark_onboarding_shown(user_id: int) -> None:
         """, (user_id, datetime.now().isoformat()))
         conn.commit()
         logger.debug(f"Marked onboarding shown for user {user_id}")
+    finally:
+        conn.close()
+
+
+def upsert_forum_thread(chat_id: int, thread_id: int) -> None:
+    """Remember forum topic (message_thread_id) for later /chatids listing."""
+    if not chat_id or not thread_id:
+        return
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO known_forum_threads (chat_id, thread_id, last_seen_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id, thread_id) DO UPDATE SET last_seen_at=excluded.last_seen_at
+            """,
+            (chat_id, thread_id, datetime.now().isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_forum_threads(chat_id: int) -> list[dict]:
+    """Return known forum topic (thread_id) records for a chat."""
+    if not chat_id:
+        return []
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT thread_id, last_seen_at
+            FROM known_forum_threads
+            WHERE chat_id = ?
+            ORDER BY thread_id ASC
+            """,
+            (chat_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
