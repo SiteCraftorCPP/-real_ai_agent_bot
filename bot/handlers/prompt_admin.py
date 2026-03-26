@@ -167,16 +167,20 @@ async def cb_prompt_dyn_full(callback: CallbackQuery) -> None:
     else:
         text = get_dynamic_block(item)
         title = f"BLOCK: {item}"
-    for i, chunk in enumerate(_split_for_telegram(text)):
-        prefix = f"📄 {title} | часть {i + 1}\n\n"
-        await callback.message.answer(prefix + chunk)
+    chunks = _split_for_telegram(text)
+    if len(chunks) == 1:
+        await callback.message.answer(f"📄 {title}\n\n{chunks[0]}")
+    else:
+        for i, chunk in enumerate(chunks):
+            prefix = f"📄 {title} | часть {i + 1}\n\n"
+            await callback.message.answer(prefix + chunk)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin:prompt:dyn:edit:{short_key}")],
             [InlineKeyboardButton(text="« Назад к динамике", callback_data="admin:prompt:dyn")],
         ]
     )
-    await callback.message.answer("Что дальше?", reply_markup=kb)
+    await callback.message.answer("Выберите действие:", reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("admin:prompt:dyn:edit:"))
