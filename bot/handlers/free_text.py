@@ -52,38 +52,6 @@ SPECIALIST_KEYWORDS = [
     "документ",
 ]
 
-# ========== ВРЕМЕННЫЙ ОБРАБОТЧИК ДЛЯ ПОЛУЧЕНИЯ ID ГРУППЫ И ТЕМЫ ==========
-# УДАЛИТЕ ЭТОТ КОД ПОСЛЕ ПОЛУЧЕНИЯ ВСЕХ ID!
-# Этот обработчик должен быть ПЕРЕД основным handle_free_text для приоритета
-
-@router.message(F.chat.id < 0, F.text)  # Только для групп/супергрупп с текстом
-async def debug_group_and_topic(message: Message):
-    """Временный обработчик для получения ID группы и темы"""
-    chat_id = message.chat.id
-    topic_id = getattr(message, 'message_thread_id', None)
-    
-    response = (
-        f"📊 Информация о группе:\n\n"
-        f"Chat ID: `{chat_id}`\n"
-        f"Chat Type: {message.chat.type}\n"
-    )
-    
-    if topic_id:
-        response += f"✅ Topic ID: `{topic_id}`\n"
-        response += "\n💡 Это ID темы! Скопируйте в .env"
-    else:
-        response += "⚠️ Topic ID: `None`\n"
-        response += "\n💡 Вы в основной группе, не в теме.\nОткройте тему и отправьте сообщение туда."
-    
-    response += f"\n\nДля .env файла:\n```\nFEEDBACK_CHAT_ID={chat_id}\n"
-    if topic_id:
-        response += f"FEEDBACK_TOPIC_ID={topic_id}\n"
-    response += "```"
-    
-    await message.answer(response, parse_mode="Markdown")
-# ========== КОНЕЦ ВРЕМЕННОГО КОДА ==========
-
-
 @router.message(
     F.text,
     ~F.text.startswith("/"),  # Exclude commands
