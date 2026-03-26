@@ -30,7 +30,8 @@ DEFAULT_BLOCKS: dict[str, str] = {
 BLOCK_FILES: dict[str, Path] = {k: DATA_DIR / f"system_prompt_block_{k}.txt" for k in BLOCK_KEYS}
 
 DEFAULT_RUNTIME_CONFIG: dict = {
-    "priority_order": ["feedback", "pricing", "risks_docs", "specialist_request"],
+    # ЛОГИКА ПОДКЛЮЧЕНИЯ (по ТЗ): pricing -> risks_docs -> feedback -> specialist_request
+    "priority_order": ["pricing", "risks_docs", "feedback", "specialist_request"],
     "patterns": {
         "feedback": [
             r"некорректн", r"ошибк", r"не\s+так", r"неверн", r"неправильн",
