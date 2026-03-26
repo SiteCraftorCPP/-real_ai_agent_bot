@@ -218,7 +218,7 @@ def should_suggest_escalation(context: dict, user_id: Optional[int] = None) -> b
         
         # Проверка дневного лимита (max 2 в день)
         today = datetime.now().strftime("%Y-%m-%d")
-        if db_escalation["daily_reset_at"] == today:
+        if db_escalation["daily_reset_at"] == today and Config.ESCALATION_MAX_PER_DAY > 0:
             if db_escalation["daily_count"] >= Config.ESCALATION_MAX_PER_DAY:
                 logger.info(f"User {user_id} reached daily escalation limit ({Config.ESCALATION_MAX_PER_DAY})")
                 return False

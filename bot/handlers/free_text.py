@@ -256,7 +256,12 @@ async def send_specialist_lead(
     from bot.database import load_user_escalation_data
     db_escalation = load_user_escalation_data(user_id)
     today = datetime.now().strftime("%Y-%m-%d")
-    if db_escalation["daily_reset_at"] == today and db_escalation["daily_count"] >= Config.ESCALATION_MAX_PER_DAY:
+    # Отключение лимита: если ESCALATION_MAX_PER_DAY <= 0 — лимит не применяется.
+    if (
+        Config.ESCALATION_MAX_PER_DAY > 0
+        and db_escalation["daily_reset_at"] == today
+        and db_escalation["daily_count"] >= Config.ESCALATION_MAX_PER_DAY
+    ):
         limit_text = "Вы уже отправили максимальное количество заявок на сегодня. Попробуйте завтра."
         if callback:
             await callback.answer(limit_text, show_alert=True)
