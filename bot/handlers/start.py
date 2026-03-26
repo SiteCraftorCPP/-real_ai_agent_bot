@@ -41,7 +41,6 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 
     # First-time: send PDF as bonus, then menu
     if not has_seen_onboarding(user_id):
-        mark_onboarding_shown(user_id)
         pdf_path = Path(Config.KEY_FIGURES_PDF_PATH)
         if pdf_path.exists():
             try:
@@ -50,6 +49,8 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                     filename=PDF_DISPLAY_FILENAME
                 )
                 await message.answer_document(document=document)
+                # Маркируем onboarding только после успешной отправки файла.
+                mark_onboarding_shown(user_id)
             except Exception as e:
                 logger.error(f"Failed to send PDF: {e}", exc_info=True)
         else:
