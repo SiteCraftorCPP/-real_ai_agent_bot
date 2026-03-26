@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.fsm.context import FSMContext
 
 from bot.config import Config
-from bot.database import has_seen_onboarding, mark_onboarding_shown
+from bot.database import mark_onboarding_shown
 from bot.keyboards import get_main_menu_inline
 from bot.texts import (
     ONBOARDING_TEXT,
@@ -39,22 +39,22 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     # 1) Сообщение 1: приветствие + ценность (без CTA/меню)
     await message.answer(ONBOARDING_TEXT)
 
-    # First-time: send PDF as bonus, then menu
-    if not has_seen_onboarding(user_id):
-        pdf_path = Path(Config.KEY_FIGURES_PDF_PATH)
-        if pdf_path.exists():
-            try:
-                document = FSInputFile(
-                    str(pdf_path),
-                    filename=PDF_DISPLAY_FILENAME
-                )
-                await message.answer_document(document=document)
-                # Маркируем onboarding только после успешной отправки файла.
-                mark_onboarding_shown(user_id)
-            except Exception as e:
-                logger.error(f"Failed to send PDF: {e}", exc_info=True)
-        else:
-            logger.warning(f"Key figures PDF not found: {pdf_path}")
+    # PDF на сообщение 2: всегда пытаемся отправить при каждом /start
+    # (если отправка не удалась — не маркируем onboarding, чтобы можно было повторить).
+    pdf_path = Path(Config.KEY_FIGURES_PDF_PATH)
+    if pdf_path.exists():
+        try:
+            document = FSInputFile(
+                str(pdf_path),
+                filename=PDF_DISPLAY_FILENAME,
+            )
+            await message.answer_document(document=document)
+            # Маркируем onboarding только после успешной отправки файла.
+            mark_onboarding_shown(user_id)
+        except Exception as e:
+            logger.error(f"Failed to send PDF: {e}", exc_info=True)
+    else:
+        logger.warning(f"Key figures PDF not found: {pdf_path}")
 
     # 3) Сообщение 3: короткий текст + CTA и меню
     await message.answer(ONBOARDING_STEP3_TEXT, reply_markup=get_main_menu_inline())

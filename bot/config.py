@@ -89,9 +89,13 @@ class Config:
     ]
     LOGO_PATH: str = os.getenv("LOGO_PATH", "assets/logo.png")
     # PDF с ключевыми цифрами для онбординга (v1.3.5)
-    KEY_FIGURES_PDF_PATH: str = os.getenv(
-        "KEY_FIGURES_PDF_PATH",
-        str(project_root / "Итоги_и_выводы_2025_Санкт_Петербург_Москва.pdf")
+    # Важно: если в .env переменная задана пустой строкой (KEY_FIGURES_PDF_PATH=),
+    # то os.getenv(...) вернёт '' и default не сработает. Это ломает отправку PDF.
+    _key_figures_pdf_env = str(os.getenv("KEY_FIGURES_PDF_PATH", "")).strip()
+    KEY_FIGURES_PDF_PATH: str = (
+        _key_figures_pdf_env
+        if _key_figures_pdf_env
+        else str(project_root / "Итоги_и_выводы_2025_Санкт_Петербург_Москва.pdf")
     )
     
     # ProxyAPI configuration (основной провайдер)
