@@ -189,7 +189,6 @@ def get_prompt_dynamic_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💸 BLOCK_PRICING", callback_data="admin:prompt:dyn:full:pr")],
             [InlineKeyboardButton(text="⚖️ BLOCK_RISKS_DOCS", callback_data="admin:prompt:dyn:full:rd")],
             [InlineKeyboardButton(text="👤 BLOCK_SPECIALIST_REQUEST", callback_data="admin:prompt:dyn:full:sp")],
-            [InlineKeyboardButton(text="🔎 Runtime JSON (patterns+priority)", callback_data="admin:prompt:dyn:full:rc")],
             [InlineKeyboardButton(text="« Назад к CORE", callback_data="admin:prompt")],
         ]
     )

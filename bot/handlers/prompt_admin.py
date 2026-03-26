@@ -12,8 +12,6 @@ from bot.keyboards import get_prompt_admin_kb, get_admin_panel_kb, get_prompt_dy
 from bot.prompt_dynamic_store import (
     get_dynamic_block,
     save_dynamic_block,
-    get_runtime_config_pretty,
-    save_runtime_config_from_text,
 )
 from bot.prompt_store import (
     MAX_PROMPT_CHARS,
@@ -41,7 +39,6 @@ DYN_KEY_MAP = {
     "pr": "pricing",
     "rd": "risks_docs",
     "sp": "specialist_request",
-    "rc": "runtime_config",
 }
 
 
@@ -160,12 +157,8 @@ async def cb_prompt_dyn_full(callback: CallbackQuery) -> None:
         await callback.answer("Неизвестный элемент", show_alert=True)
         return
     await callback.answer("Отправляю…")
-    if item == "runtime_config":
-        text = get_runtime_config_pretty()
-        title = "Runtime JSON (patterns + priority)"
-    else:
-        text = get_dynamic_block(item)
-        title = f"BLOCK: {item}"
+    text = get_dynamic_block(item)
+    title = f"BLOCK: {item}"
     chunks = _split_for_telegram(text)
     if len(chunks) == 1:
         await callback.message.answer(f"📄 {title}\n\n{chunks[0]}")
@@ -196,8 +189,6 @@ async def cb_prompt_dyn_edit(callback: CallbackQuery, state: FSMContext) -> None
     await state.set_state(PromptAdminStates.waiting_dyn_text)
     await state.update_data(dyn_key=short_key)
     tip = "Пришлите новый текст сообщением или файлом .txt/.md (UTF-8)."
-    if item == "runtime_config":
-        tip = "Пришлите валидный JSON с полями: priority_order и patterns."
     await callback.message.answer(f"✏️ Редактирование: `{item}`\n\n{tip}\nОтмена: /cancel", parse_mode="Markdown")
 
 
@@ -254,10 +245,7 @@ async def dyn_edit_text(message: Message, state: FSMContext) -> None:
         await message.answer("Пустой текст. Пришлите данные или /cancel.")
         return
     try:
-        if item == "runtime_config":
-            save_runtime_config_from_text(text)
-        else:
-            save_dynamic_block(item, text)
+        save_dynamic_block(item, text)
     except ValueError as e:
         await message.answer(f"❌ {e}")
         return
@@ -326,8 +314,8 @@ async def dyn_edit_document(message: Message, state: FSMContext, bot: Bot) -> No
         await message.answer("❌ Файл слишком большой (макс. 2 МБ).")
         return
     file_name = (doc.file_name or "").lower()
-    if file_name and not (file_name.endswith(".txt") or file_name.endswith(".md") or file_name.endswith(".json")):
-        await message.answer("❌ Пришлите `.txt` / `.md` / `.json`.")
+    if file_name and not (file_name.endswith(".txt") or file_name.endswith(".md")):
+        await message.answer("❌ Пришлите `.txt` / `.md`.")
         return
     buf = io.BytesIO()
     try:
@@ -343,10 +331,7 @@ async def dyn_edit_document(message: Message, state: FSMContext, bot: Bot) -> No
         await message.answer("❌ Неверная кодировка. Сохраните файл как UTF-8.")
         return
     try:
-        if item == "runtime_config":
-            save_runtime_config_from_text(text)
-        else:
-            save_dynamic_block(item, text)
+        save_dynamic_block(item, text)
     except ValueError as e:
         await message.answer(f"❌ {e}")
         return
