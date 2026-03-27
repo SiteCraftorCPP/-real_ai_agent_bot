@@ -52,6 +52,20 @@ SPECIALIST_KEYWORDS = [
     "документ",
 ]
 
+
+async def _safe_callback_answer(
+    callback: CallbackQuery | None,
+    text: str | None = None,
+    show_alert: bool = False,
+) -> None:
+    """Safely answer callback query (ignore stale/already-answered errors)."""
+    if not callback:
+        return
+    try:
+        await callback.answer(text or "", show_alert=show_alert)
+    except Exception as e:
+        logger.debug(f"Skip callback.answer due to Telegram error: {e}")
+
 @router.message(
     F.text,
     ~F.text.startswith("/"),  # Exclude commands
@@ -264,7 +278,7 @@ async def send_specialist_lead(
     ):
         limit_text = "Вы уже отправили максимальное количество заявок на сегодня. Попробуйте завтра."
         if callback:
-            await callback.answer(limit_text, show_alert=True)
+            await _safe_callback_answer(callback, limit_text, show_alert=True)
         elif reply_message:
             await reply_message.answer(limit_text)
         return
@@ -321,7 +335,7 @@ async def send_specialist_lead(
         # Подтверждение пользователю — без доп. вопросов
         confirmation_text = "Заявка принята. Специалист свяжется с вами."
         if callback:
-            await callback.answer(confirmation_text, show_alert=False)
+            await _safe_callback_answer(callback, confirmation_text, show_alert=False)
         if reply_message:
             await reply_message.answer(confirmation_text)
         
@@ -329,7 +343,7 @@ async def send_specialist_lead(
         logger.error(f"Failed to send lead: {e}", exc_info=True)
         error_text = "Произошла ошибка при отправке заявки. Попробуйте позже."
         if callback:
-            await callback.answer(error_text, show_alert=True)
+            await _safe_callback_answer(callback, error_text, show_alert=True)
         elif reply_message:
             await reply_message.answer(error_text)
 
@@ -419,6 +433,8 @@ async def handle_escalation_confirm(callback: CallbackQuery, state: FSMContext) 
     username = callback.from_user.username
     
     logger.info(f"Escalation button clicked by user {user_id}")
+    # Быстрый ACK, чтобы Telegram сразу закрыл "часики" на кнопке.
+    await _safe_callback_answer(callback, "Отправляю заявку специалисту…")
     
     # Получаем причину из контекста (pricing/risks/...)
     context = await get_session_context(state, user_id)
@@ -444,6 +460,8 @@ async def handle_consultation_request(callback: CallbackQuery, state: FSMContext
     username = callback.from_user.username
     
     logger.info(f"Consultation request button clicked by user {user_id}")
+    # Быстрый ACK, чтобы Telegram сразу закрыл "часики" на кнопке.
+    await _safe_callback_answer(callback, "Отправляю заявку специалисту…")
     
     await send_specialist_lead(
         bot=callback.message.bot,
