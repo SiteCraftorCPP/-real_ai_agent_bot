@@ -836,12 +836,21 @@ def process_response(
     updated_context = context.copy()
 
     # 0.2. Маркер-кнопка эскалации от модели: превращаем в настоящую inline-кнопку.
-    # Модель иногда печатает "[Подключить специалиста]" — это должно быть UI, не текст.
+    # Модель иногда печатает текстовые маркеры вида:
+    # - "[Подключить специалиста]"
+    # - "Кнопка: Получить консультацию специалиста"
+    # Это должно быть UI-кнопкой, а не текстом в сообщении.
     escalation_marker_found = False
-    marker_pattern = r"\[\s*подключить\s+специалиста\s*\]"
-    if re.search(marker_pattern, result, re.IGNORECASE):
-        escalation_marker_found = True
-        result = re.sub(marker_pattern, "", result, flags=re.IGNORECASE)
+    escalation_marker_patterns = [
+        r"\[\s*подключить\s+специалиста\s*\]",
+        r"(?im)^\s*кнопка\s*:\s*(?:получить\s+)?консультаци(?:ю|и)\s+специалиста\s*$",
+        r"(?im)^\s*кнопка\s*:\s*подключить\s+специалиста\s*$",
+    ]
+    for marker_pattern in escalation_marker_patterns:
+        if re.search(marker_pattern, result, re.IGNORECASE):
+            escalation_marker_found = True
+            result = re.sub(marker_pattern, "", result, flags=re.IGNORECASE)
+    if escalation_marker_found:
         # подчистим лишние пустые строки после вырезания
         result = re.sub(r"\n{3,}", "\n\n", result).strip()
     
