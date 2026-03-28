@@ -14,7 +14,6 @@ from bot.database import (
     remove_admin,
     get_admins,
     is_db_admin,
-    get_bot_users_stats,
     get_all_bot_users,
 )
 from bot.prompt_store import can_edit_prompt
@@ -73,30 +72,27 @@ def _format_date(iso_date: str) -> str:
         return iso_date
 
 
-def _users_stats_block() -> str:
-    s = get_bot_users_stats()
-    return (
-        f"👤 *Пользователи бота*\n\n"
-        f"Всего уникальных: *{s['total']}*\n"
-        f"Новых за 24 часа: *{s['new_24h']}*\n"
-        f"Новых за 7 дней: *{s['new_7d']}*\n\n"
-        f"«Новые» — пользователи с первым заходом в этом периоде."
-    )
-
-
-def _users_list_plain_lines() -> str:
+def _format_users_list_for_telegram() -> str:
+    """Компактный список для отображения в Telegram."""
     rows = get_all_bot_users()
     if not rows:
-        return "Пока нет записанных пользователей."
-    lines: list[str] = []
+        return (
+            "📋 Список пользователей\n\n"
+            "user_id, username\n\n"
+            "Пока нет записанных пользователей."
+        )
+    out_lines = [
+        "📋 Список пользователей",
+        "",
+        "user_id, username",
+        "",
+    ]
     for r in rows:
         uid = r["user_id"]
         un = (r.get("username") or "").strip()
         udisp = f"@{un}" if un else "—"
-        fs = _format_date(r.get("first_seen_at", "") or "")
-        ls = _format_date(r.get("last_seen_at", "") or "")
-        lines.append(f"{uid}\t{udisp}\tпервый: {fs}\tпоследний: {ls}")
-    return "\n".join(lines)
+        out_lines.append(f"{uid}, {udisp}")
+    return "\n".join(out_lines)
 
 
 def _users_txt_bytes() -> bytes:
@@ -358,16 +354,15 @@ async def cb_export_all(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "admin:users")
 async def cb_users_menu(callback: CallbackQuery) -> None:
-    """Счётчики пользователей и действия со списком."""
+    """Меню: список в Telegram или выгрузка .txt."""
     if not is_admin(callback.from_user.id, callback.from_user.username):
         await callback.answer("Нет доступа", show_alert=True)
         return
 
     await callback.answer()
     await callback.message.edit_text(
-        _users_stats_block(),
+        "👤 Пользователи",
         reply_markup=get_admin_users_kb(),
-        parse_mode="Markdown",
     )
 
 
@@ -379,12 +374,10 @@ async def cb_users_list(callback: CallbackQuery) -> None:
         return
 
     await callback.answer()
-    plain = _users_list_plain_lines()
-    header = "📋 Список пользователей (user_id, username, первый/последний контакт):\n\n"
-    full = header + plain
+    full = _format_users_list_for_telegram()
     chunks = _split_chunks(full, USERS_LIST_CHUNK)
     for i, ch in enumerate(chunks):
-        prefix = f"📋 Часть {i + 1}/{len(chunks)}\n\n" if len(chunks) > 1 else ""
+        prefix = f"Часть {i + 1}/{len(chunks)}\n\n" if len(chunks) > 1 else ""
         await callback.message.answer(prefix + ch)
 
 
@@ -396,13 +389,12 @@ async def cb_users_download(callback: CallbackQuery) -> None:
         return
 
     await callback.answer("Готовлю файл...")
-    stats = get_bot_users_stats()
     data = _users_txt_bytes()
     fname = f"bot_users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     file = BufferedInputFile(data, filename=fname)
     await callback.message.answer_document(
         file,
-        caption=f"👤 Пользователи (всего в базе: {stats['total']})",
+        caption="📋 Список пользователей (.txt)",
     )
 
 
