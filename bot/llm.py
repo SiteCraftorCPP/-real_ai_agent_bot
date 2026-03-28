@@ -45,6 +45,44 @@ if openrouter_key_initial:
 FALLBACK_MESSAGE = "Сервис временно недоступен, попробуйте позже."
 
 
+def _merge_histories_for_llm(session_data: dict | None) -> list[dict]:
+    """
+    Собрать единую историю сообщений до текущего вопроса.
+    Берём conversation_history; если пусто — session_history (тот же диалог в БД-сессии).
+    Формат элементов: {"role": "U"|"B", "text": "..."}.
+    """
+    if not session_data:
+        return []
+    conv = session_data.get("conversation_history") or []
+    sess = session_data.get("session_history") or []
+    sess_simple = [
+        {"role": m.get("role"), "text": (m.get("text") or "").strip()}
+        for m in sess
+        if (m.get("text") or "").strip()
+    ]
+    raw = conv if len(conv) >= len(sess_simple) else sess_simple
+    # Страховка: текущий вопрос не должен дублироваться в истории
+    if raw and raw[-1].get("role") == "U":
+        raw = raw[:-1]
+    return raw
+
+
+def _history_to_openai_messages(history: list[dict], max_messages: int) -> list[dict]:
+    """U/B -> user/assistant, последние max_messages сообщений."""
+    if max_messages < 1:
+        max_messages = 12
+    role_mapping = {"U": "user", "B": "assistant"}
+    trimmed = history[-max_messages:] if len(history) > max_messages else history
+    out: list[dict] = []
+    for msg in trimmed:
+        role = msg.get("role", "")
+        text = (msg.get("text") or "").strip()
+        if role not in role_mapping or not text:
+            continue
+        out.append({"role": role_mapping[role], "content": text})
+    return out
+
+
 def detect_request_type(user_text: str, is_feedback_mode: bool = False) -> list[str]:
     """
     Определить тип запроса для подключения динамических блоков v1.3.4.
@@ -255,38 +293,20 @@ async def generate_reply(
         is_feedback_mode=is_feedback_mode
     )
     
-    # Extract and prepare conversation history
-    conversation_history = []
-    if session_data and "conversation_history" in session_data:
-        conversation_history = session_data["conversation_history"]
-    elif context and "conversation_history" in context:
-        conversation_history = context["conversation_history"]
-    
-    # Convert history format and limit length
-    # Format: [{"role": "U", "text": "..."}, {"role": "B", "text": "..."}] 
-    # -> [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
-    # Exclude the last user message if it exists (it's already in user_message)
-    history_messages = []
-    if conversation_history:
-        # Exclude last message if it's from user (to avoid duplication)
-        history_to_convert = conversation_history
-        if len(history_to_convert) > 0 and history_to_convert[-1].get("role") == "U":
-            history_to_convert = history_to_convert[:-1]
-        
-        # Limit to last 15 pairs (30 messages) for token economy
-        if len(history_to_convert) > 30:
-            history_to_convert = history_to_convert[-30:]
-        
-        # Convert format
-        role_mapping = {"U": "user", "B": "assistant"}
-        for msg in history_to_convert:
-            role = msg.get("role", "")
-            text = msg.get("text", "")
-            if role in role_mapping and text:
-                history_messages.append({
-                    "role": role_mapping[role],
-                    "content": text
-                })
+    # История диалога: последние N сообщений (user + assistant), без дубля текущего вопроса
+    raw_history = _merge_histories_for_llm(session_data)
+    if not raw_history and context and context.get("conversation_history"):
+        raw_history = context["conversation_history"]
+        if raw_history and raw_history[-1].get("role") == "U":
+            raw_history = raw_history[:-1]
+    history_messages = _history_to_openai_messages(
+        raw_history,
+        Config.LLM_CHAT_HISTORY_MAX_MESSAGES,
+    )
+    logger.info(
+        f"LLM: в запрос передаётся {len(history_messages)} сообщений истории "
+        f"(лимит {Config.LLM_CHAT_HISTORY_MAX_MESSAGES})"
+    )
     
     # Trim user text to 2000 characters
     trimmed_user_text = user_text[:2000] if len(user_text) > 2000 else user_text

@@ -128,6 +128,9 @@ class Config:
     BOT_VERSION: str = os.getenv("BOT_VERSION", "1.3.5")
     SESSION_TIMEOUT_MINUTES: int = _get_int("SESSION_TIMEOUT_MINUTES", 60)
     MAX_CONTEXT_MESSAGES: int = _get_int("MAX_CONTEXT_MESSAGES", 50)
+    # Сколько последних сообщений диалога (user+assistant) передавать в LLM (окно контекста).
+    # Рекомендуется 8–12; по умолчанию 12.
+    LLM_CHAT_HISTORY_MAX_MESSAGES: int = _get_int("LLM_CHAT_HISTORY_MAX_MESSAGES", 12)
     
     # Feature Flags
     ENABLE_ANALYTICS: bool = os.getenv("ENABLE_ANALYTICS", "true").lower() == "true"

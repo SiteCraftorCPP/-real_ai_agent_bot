@@ -121,13 +121,20 @@ async def handle_free_text(message: Message, state: FSMContext) -> None:
     # Добавляем в историю сессии (state + DB)
     await add_to_session_history(state, "U", text)
     
-    # Подготавливаем session_data для LLM (для обратной совместимости)
+    # Подготавливаем session_data для LLM: история после записи текущего сообщения,
+    # чтобы в LLM ушло окно предыдущих реплик (user+assistant), без дубля текущего вопроса.
     collected_data = context.get("collected_data", {})
+    fresh = await state.get_data()
+    conv = fresh.get("conversation_history", [])
+    history_before_current = conv[:-1] if conv and conv[-1].get("role") == "U" else conv
+    sess = fresh.get("session_history", [])
+    session_history_before_current = sess[:-1] if sess and sess[-1].get("role") == "U" else sess
     session_data = {
         "collected_data": collected_data,
         "asked_questions": context.get("asked_questions", []),
         "selected_section": selected_section,
-        "conversation_history": context.get("conversation_history", []),
+        "conversation_history": history_before_current,
+        "session_history": session_history_before_current,
     }
     
     # Также добавляем плоские поля для обратной совместимости
