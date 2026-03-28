@@ -96,15 +96,15 @@ def _format_users_list_for_telegram() -> str:
 
 
 def _users_txt_bytes() -> bytes:
-    header = "user_id\tusername\tfirst_seen_at\tlast_seen_at\n"
+    """Тот же смысл, что список в Telegram: только user_id и username (TSV)."""
+    header = "user_id\tusername\n"
     rows = get_all_bot_users()
     body_lines = []
     for r in rows:
         uid = r["user_id"]
-        un = (r.get("username") or "").replace("\t", " ")
-        fs = r.get("first_seen_at", "") or ""
-        ls = r.get("last_seen_at", "") or ""
-        body_lines.append(f"{uid}\t{un}\t{fs}\t{ls}")
+        un = (r.get("username") or "").strip().replace("\t", " ")
+        ucol = f"@{un}" if un else "—"
+        body_lines.append(f"{uid}\t{ucol}")
     text = header + "\n".join(body_lines)
     return ("\ufeff" + text).encode("utf-8")
 
