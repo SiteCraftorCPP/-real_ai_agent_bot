@@ -7,9 +7,18 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.filters import Command
 from bot.config import Config
-from bot.database import get_stats, get_all_feedback, add_admin, remove_admin, get_admins, is_db_admin
+from bot.database import (
+    get_stats,
+    get_all_feedback,
+    add_admin,
+    remove_admin,
+    get_admins,
+    is_db_admin,
+    get_bot_users_stats,
+    get_all_bot_users,
+)
 from bot.prompt_store import can_edit_prompt
-from bot.keyboards import get_admin_panel_kb, get_export_date_kb, get_admin_manage_kb
+from bot.keyboards import get_admin_panel_kb, get_export_date_kb, get_admin_manage_kb, get_admin_users_kb
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -21,6 +30,9 @@ class AdminStates(StatesGroup):
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# Лимит длины одного сообщения Telegram (запас под заголовок)
+USERS_LIST_CHUNK = 3800
 
 
 def is_admin(user_id: int, username: str | None = None) -> bool:
@@ -59,6 +71,57 @@ def _format_date(iso_date: str) -> str:
         return dt.strftime("%d.%m.%Y %H:%M")
     except:
         return iso_date
+
+
+def _users_stats_block() -> str:
+    s = get_bot_users_stats()
+    return (
+        f"👤 *Пользователи бота*\n\n"
+        f"Всего уникальных: *{s['total']}*\n"
+        f"Новых за 24 часа: *{s['new_24h']}*\n"
+        f"Новых за 7 дней: *{s['new_7d']}*\n\n"
+        f"«Новые» — пользователи с первым заходом в этом периоде."
+    )
+
+
+def _users_list_plain_lines() -> str:
+    rows = get_all_bot_users()
+    if not rows:
+        return "Пока нет записанных пользователей."
+    lines: list[str] = []
+    for r in rows:
+        uid = r["user_id"]
+        un = (r.get("username") or "").strip()
+        udisp = f"@{un}" if un else "—"
+        fs = _format_date(r.get("first_seen_at", "") or "")
+        ls = _format_date(r.get("last_seen_at", "") or "")
+        lines.append(f"{uid}\t{udisp}\tпервый: {fs}\tпоследний: {ls}")
+    return "\n".join(lines)
+
+
+def _users_txt_bytes() -> bytes:
+    header = "user_id\tusername\tfirst_seen_at\tlast_seen_at\n"
+    rows = get_all_bot_users()
+    body_lines = []
+    for r in rows:
+        uid = r["user_id"]
+        un = (r.get("username") or "").replace("\t", " ")
+        fs = r.get("first_seen_at", "") or ""
+        ls = r.get("last_seen_at", "") or ""
+        body_lines.append(f"{uid}\t{un}\t{fs}\t{ls}")
+    text = header + "\n".join(body_lines)
+    return ("\ufeff" + text).encode("utf-8")
+
+
+def _split_chunks(text: str, limit: int) -> list[str]:
+    if len(text) <= limit:
+        return [text]
+    chunks: list[str] = []
+    start = 0
+    while start < len(text):
+        chunks.append(text[start : start + limit])
+        start += limit
+    return chunks
 
 
 def _format_rating(rating: str) -> str:
@@ -291,6 +354,56 @@ async def cb_export_all(callback: CallbackQuery) -> None:
     
     file = BufferedInputFile(csv_bytes, filename=filename)
     await callback.message.answer_document(file, caption=f"📊 Весь фидбек ({count} записей)")
+
+
+@router.callback_query(F.data == "admin:users")
+async def cb_users_menu(callback: CallbackQuery) -> None:
+    """Счётчики пользователей и действия со списком."""
+    if not is_admin(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    await callback.answer()
+    await callback.message.edit_text(
+        _users_stats_block(),
+        reply_markup=get_admin_users_kb(),
+        parse_mode="Markdown",
+    )
+
+
+@router.callback_query(F.data == "admin:users:list")
+async def cb_users_list(callback: CallbackQuery) -> None:
+    """Показать список пользователей в Telegram (несколькими сообщениями при необходимости)."""
+    if not is_admin(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    await callback.answer()
+    plain = _users_list_plain_lines()
+    header = "📋 Список пользователей (user_id, username, первый/последний контакт):\n\n"
+    full = header + plain
+    chunks = _split_chunks(full, USERS_LIST_CHUNK)
+    for i, ch in enumerate(chunks):
+        prefix = f"📋 Часть {i + 1}/{len(chunks)}\n\n" if len(chunks) > 1 else ""
+        await callback.message.answer(prefix + ch)
+
+
+@router.callback_query(F.data == "admin:users:download")
+async def cb_users_download(callback: CallbackQuery) -> None:
+    """Выгрузка списка пользователей в .txt."""
+    if not is_admin(callback.from_user.id, callback.from_user.username):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    await callback.answer("Готовлю файл...")
+    stats = get_bot_users_stats()
+    data = _users_txt_bytes()
+    fname = f"bot_users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    file = BufferedInputFile(data, filename=fname)
+    await callback.message.answer_document(
+        file,
+        caption=f"👤 Пользователи (всего в базе: {stats['total']})",
+    )
 
 
 # === Admin management callbacks ===

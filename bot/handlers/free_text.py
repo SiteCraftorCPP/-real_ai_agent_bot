@@ -26,7 +26,7 @@ from bot.context import (
     get_session_history_from_state,
     format_session_for_file,
 )
-from bot.database import get_session_info
+from bot.database import get_session_info, upsert_bot_user
 from bot.errors import handle_error, APITimeoutError
 from bot.utils import (
     is_docs_or_taxes_topic,
@@ -78,6 +78,7 @@ async def handle_free_text(message: Message, state: FSMContext) -> None:
     username = message.from_user.username or "N/A"
     text = message.text
     logger.info(f"User {user_id} (@{username}) sent text: {text}")
+    upsert_bot_user(user_id, message.from_user.username)
     
     # Ignore messages from feedback chat - bot should not respond there
     if Config.FEEDBACK_CHAT_ID != 0 and message.chat.id == Config.FEEDBACK_CHAT_ID:

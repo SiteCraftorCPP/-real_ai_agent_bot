@@ -160,6 +160,7 @@ def get_admin_panel_kb(
     buttons = [
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin:report")],
         [InlineKeyboardButton(text="📥 Экспорт фидбека", callback_data="admin:export")],
+        [InlineKeyboardButton(text="👤 Пользователи", callback_data="admin:users")],
     ]
     if show_prompt:
         buttons.append([InlineKeyboardButton(text="🤖 Промпт GPT (CORE)", callback_data="admin:prompt")])
@@ -205,6 +206,17 @@ def get_admin_manage_kb() -> InlineKeyboardMarkup:
         ]
     )
     return keyboard
+
+
+def get_admin_users_kb() -> InlineKeyboardMarkup:
+    """Меню учёта пользователей: список в Telegram и выгрузка .txt."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Список в Telegram", callback_data="admin:users:list")],
+            [InlineKeyboardButton(text="📥 Скачать .txt", callback_data="admin:users:download")],
+            [InlineKeyboardButton(text="« В админ-панель", callback_data="admin:back")],
+        ]
+    )
 
 
 def get_export_date_kb() -> InlineKeyboardMarkup:

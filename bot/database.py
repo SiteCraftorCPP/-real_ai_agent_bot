@@ -3,7 +3,7 @@ import sqlite3
 import json
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,15 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             thread_id INTEGER NOT NULL,
             last_seen_at TEXT NOT NULL,
             PRIMARY KEY (chat_id, thread_id)
+        )
+    """)
+    # Уникальные пользователи бота (для админской статистики)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
         )
     """)
     conn.commit()
@@ -700,6 +709,70 @@ def get_forum_threads(chat_id: int) -> list[dict]:
             ORDER BY thread_id ASC
             """,
             (chat_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def upsert_bot_user(user_id: int, username: Optional[str]) -> None:
+    """
+    Записать/обновить пользователя: при первом заходе — first_seen_at,
+    при каждом контакте — last_seen_at и актуальный username.
+    """
+    now = datetime.now().isoformat()
+    un = (username or "").strip() or None
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO bot_users (user_id, username, first_seen_at, last_seen_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                username = COALESCE(excluded.username, bot_users.username),
+                last_seen_at = excluded.last_seen_at
+            """,
+            (user_id, un, now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_bot_users_stats() -> dict:
+    """Всего пользователей и «новые» по first_seen_at за 24ч и 7 дней."""
+    conn = get_connection()
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM bot_users").fetchone()[0]
+        day_ago = (datetime.now() - timedelta(days=1)).isoformat()
+        week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+        new_24h = conn.execute(
+            "SELECT COUNT(*) FROM bot_users WHERE first_seen_at >= ?",
+            (day_ago,),
+        ).fetchone()[0]
+        new_7d = conn.execute(
+            "SELECT COUNT(*) FROM bot_users WHERE first_seen_at >= ?",
+            (week_ago,),
+        ).fetchone()[0]
+        return {
+            "total": total,
+            "new_24h": new_24h,
+            "new_7d": new_7d,
+        }
+    finally:
+        conn.close()
+
+
+def get_all_bot_users() -> list[dict]:
+    """Все пользователи, сначала недавно добавленные."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT user_id, username, first_seen_at, last_seen_at
+            FROM bot_users
+            ORDER BY first_seen_at DESC
+            """
         ).fetchall()
         return [dict(r) for r in rows]
     finally:

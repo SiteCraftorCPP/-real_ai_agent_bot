@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.fsm.context import FSMContext
 
 from bot.config import Config
-from bot.database import mark_onboarding_shown
+from bot.database import mark_onboarding_shown, upsert_bot_user
 from bot.keyboards import get_main_menu_inline
 from bot.texts import (
     ONBOARDING_TEXT,
@@ -32,6 +32,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
     username = message.from_user.username
     logger.info(f"User {user_id} (@{username}) sent /start")
+    upsert_bot_user(user_id, username)
 
     # Reset state
     await state.clear()
