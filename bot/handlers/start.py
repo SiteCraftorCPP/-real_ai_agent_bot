@@ -10,10 +10,8 @@ from aiogram.fsm.context import FSMContext
 from bot.config import Config
 from bot.database import mark_onboarding_shown, upsert_bot_user
 from bot.keyboards import get_main_menu_inline
-from bot.texts import (
-    ONBOARDING_TEXT,
-    ONBOARDING_STEP3_TEXT,
-)
+from bot.onboarding_store import get_onboarding_text
+from bot.texts import ONBOARDING_STEP3_TEXT
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -38,7 +36,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
 
     # 1) Сообщение 1: приветствие + ценность (без CTA/меню)
-    await message.answer(ONBOARDING_TEXT)
+    await message.answer(get_onboarding_text())
 
     # PDF на сообщение 2: всегда пытаемся отправить при каждом /start
     # (если отправка не удалась — не маркируем onboarding, чтобы можно было повторить).

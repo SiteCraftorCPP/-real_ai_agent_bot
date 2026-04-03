@@ -777,3 +777,13 @@ def get_all_bot_users() -> list[dict]:
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def get_all_bot_user_ids() -> list[int]:
+    """Все user_id из bot_users (для рассылки)."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT user_id FROM bot_users").fetchall()
+        return [int(r[0]) for r in rows]
+    finally:
+        conn.close()

@@ -149,6 +149,7 @@ def get_feedback_reasons_kb() -> InlineKeyboardMarkup:
 def get_admin_panel_kb(
     show_prompt: bool = False,
     prompt_only: bool = False,
+    full_admin_tools: bool = False,
 ) -> InlineKeyboardMarkup:
     """Create admin panel keyboard."""
     if prompt_only:
@@ -162,10 +163,14 @@ def get_admin_panel_kb(
         [InlineKeyboardButton(text="📥 Экспорт фидбека", callback_data="admin:export")],
         [InlineKeyboardButton(text="👤 Пользователи", callback_data="admin:users")],
     ]
+    if full_admin_tools:
+        buttons.append([InlineKeyboardButton(text="📢 Рассылка", callback_data="admin:broadcast")])
+        buttons.append([InlineKeyboardButton(text="👋 Приветствие /start", callback_data="admin:onboarding")])
     if show_prompt:
         buttons.append([InlineKeyboardButton(text="🤖 Промпт GPT (CORE)", callback_data="admin:prompt")])
-    buttons.append([InlineKeyboardButton(text="👥 Управление админами", callback_data="admin:manage")])
-    
+    if full_admin_tools:
+        buttons.append([InlineKeyboardButton(text="👥 Управление админами", callback_data="admin:manage")])
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -206,6 +211,18 @@ def get_admin_manage_kb() -> InlineKeyboardMarkup:
         ]
     )
     return keyboard
+
+
+def get_onboarding_admin_kb() -> InlineKeyboardMarkup:
+    """Меню редактирования текста приветствия /start."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="👀 Показать в Telegram", callback_data="admin:onboarding:full")],
+            [InlineKeyboardButton(text="📥 Скачать .txt", callback_data="admin:onboarding:download")],
+            [InlineKeyboardButton(text="✏️ Заменить (.txt)", callback_data="admin:onboarding:edit")],
+            [InlineKeyboardButton(text="« В админ-панель", callback_data="admin:onboarding:back")],
+        ]
+    )
 
 
 def get_admin_users_kb() -> InlineKeyboardMarkup:

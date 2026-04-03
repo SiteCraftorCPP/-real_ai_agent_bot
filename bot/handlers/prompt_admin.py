@@ -21,7 +21,7 @@ from bot.prompt_store import (
     save_core_prompt,
     uses_bundled_default,
 )
-from bot.handlers.admin import is_admin, is_prompt_only_editor
+from bot.handlers.admin import is_admin, is_prompt_only_editor, admin_panel_opening_markdown
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -142,11 +142,13 @@ async def cb_prompt_back(callback: CallbackQuery) -> None:
     uid = callback.from_user.id
     un = callback.from_user.username
     await callback.message.edit_text(
-        "🔐 Админ-панель\n\nВыберите действие:",
+        admin_panel_opening_markdown(uid, un),
         reply_markup=get_admin_panel_kb(
             show_prompt=can_edit_prompt(uid, un),
             prompt_only=is_prompt_only_editor(uid, un),
+            full_admin_tools=is_admin(uid, un),
         ),
+        parse_mode="Markdown",
     )
 
 

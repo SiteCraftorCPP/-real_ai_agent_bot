@@ -15,6 +15,7 @@ from bot.database import (
     get_admins,
     is_db_admin,
     get_all_bot_users,
+    get_bot_users_stats,
 )
 from bot.prompt_store import can_edit_prompt
 from bot.keyboards import get_admin_panel_kb, get_export_date_kb, get_admin_manage_kb, get_admin_users_kb
@@ -51,6 +52,18 @@ def is_admin(user_id: int, username: str | None = None) -> bool:
 def is_prompt_only_editor(user_id: int, username: str | None) -> bool:
     """Доступ к /admin только к промпту: в PROMPT_ADMIN_USERNAMES, но не полноценный админ."""
     return can_edit_prompt(user_id, username) and not is_admin(user_id, username)
+
+
+def admin_panel_opening_markdown(user_id: int, username: str | None) -> str:
+    """Текст открытия админ-панели; для полных админов — число подписчиков из bot_users."""
+    base = "🔐 *Админ-панель*"
+    if is_admin(user_id, username):
+        try:
+            n = get_bot_users_stats()["total"]
+            return f"{base}\n\n👥 Подписчиков: *{n}*\n\nВыберите действие:"
+        except Exception:
+            pass
+    return f"{base}\n\nВыберите действие:"
 
 
 # === Helper functions ===
@@ -209,13 +222,15 @@ async def handle_admin_panel(message: Message) -> None:
 
     show_prompt = can_edit_prompt(uid, un)
     prompt_only = is_prompt_only_editor(uid, un)
+    full_admin = is_admin(uid, un)
     await message.answer(
-        "🔐 *Админ-панель*\n\nВыберите действие:",
+        admin_panel_opening_markdown(uid, un),
         reply_markup=get_admin_panel_kb(
             show_prompt=show_prompt,
             prompt_only=prompt_only,
+            full_admin_tools=full_admin,
         ),
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
 
 
@@ -284,12 +299,13 @@ async def cb_back(callback: CallbackQuery) -> None:
     show_prompt = can_edit_prompt(uid, un)
     prompt_only = is_prompt_only_editor(uid, un)
     await callback.message.edit_text(
-        "🔐 *Админ-панель*\n\nВыберите действие:",
+        admin_panel_opening_markdown(uid, un),
         reply_markup=get_admin_panel_kb(
             show_prompt=show_prompt,
             prompt_only=prompt_only,
+            full_admin_tools=is_admin(uid, un),
         ),
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
 
 
