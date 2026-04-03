@@ -68,11 +68,7 @@ async def cb_broadcast_start(callback: CallbackQuery, state: FSMContext) -> None
     await callback.answer()
     await state.set_state(BroadcastStates.waiting_message)
     await callback.message.answer(
-        "📢 *Рассылка*\n\n"
-        "Пришлите *одно* сообщение — его получат все пользователи из базы бота "
-        "(подойдут текст, фото, видео, документ и т.п.).\n\n"
-        "Отмена: /cancel",
-        parse_mode="Markdown",
+        "📢 Рассылка\n\nПришлите сообщение:\nОтмена: /cancel",
     )
 
 
