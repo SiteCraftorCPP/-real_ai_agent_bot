@@ -12,13 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from bot.handlers.admin import is_admin
 from bot.keyboards import get_onboarding_admin_kb, get_admin_panel_kb
-from bot.onboarding_store import (
-    MAX_ONBOARDING_CHARS,
-    get_onboarding_text,
-    save_onboarding_text,
-    uses_default_onboarding,
-    ONBOARDING_OVERRIDE_PATH,
-)
+from bot.onboarding_store import get_onboarding_text, save_onboarding_text
 from bot.prompt_store import can_edit_prompt
 from bot.handlers.admin import is_prompt_only_editor
 
@@ -29,19 +23,11 @@ TELEGRAM_TEXT_LIMIT = 4096
 
 
 class OnboardingAdminStates(StatesGroup):
-    waiting_txt_file = State()
+    waiting_content = State()
 
 
 def _status_text() -> str:
-    src = "встроенный (bot/texts.py)" if uses_default_onboarding() else f"файл `{ONBOARDING_OVERRIDE_PATH.name}`"
-    body = get_onboarding_text()
-    return (
-        "👋 *Приветствие /start* (первое сообщение онбординга)\n\n"
-        f"Источник: {src}\n"
-        f"Длина: {len(body)} символов\n"
-        f"Макс. при загрузке: {MAX_ONBOARDING_CHARS}\n\n"
-        "Выберите действие:"
-    )
+    return "👋 Приветствие /start\n\nВыберите действие:"
 
 
 def _split_chunks(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list[str]:
@@ -59,7 +45,6 @@ async def cb_onboarding_menu(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         _status_text(),
         reply_markup=get_onboarding_admin_kb(),
-        parse_mode="Markdown",
     )
 
 
@@ -96,13 +81,8 @@ async def cb_onboarding_edit(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer("Нет доступа", show_alert=True)
         return
     await callback.answer()
-    await state.set_state(OnboardingAdminStates.waiting_txt_file)
-    await callback.message.answer(
-        f"✏️ Пришлите новый текст приветствия *файлом* `.txt` (UTF-8).\n\n"
-        f"До {MAX_ONBOARDING_CHARS} символов.\n"
-        "Отмена: /cancel",
-        parse_mode="Markdown",
-    )
+    await state.set_state(OnboardingAdminStates.waiting_content)
+    await callback.message.answer("✏️ Пришлите новый текст приветствия\nОтмена: /cancel")
 
 
 @router.callback_query(F.data == "admin:onboarding:back")
@@ -133,7 +113,7 @@ async def cb_onboarding_back(callback: CallbackQuery) -> None:
     )
 
 
-@router.message(OnboardingAdminStates.waiting_txt_file, Command("cancel"))
+@router.message(OnboardingAdminStates.waiting_content, Command("cancel"))
 async def onboarding_edit_cancel(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id, message.from_user.username):
         await state.clear()
@@ -142,14 +122,14 @@ async def onboarding_edit_cancel(message: Message, state: FSMContext) -> None:
     await message.answer("Отменено.")
 
 
-@router.message(OnboardingAdminStates.waiting_txt_file, F.document)
+@router.message(OnboardingAdminStates.waiting_content, F.document)
 async def onboarding_edit_document(message: Message, state: FSMContext, bot: Bot) -> None:
     if not is_admin(message.from_user.id, message.from_user.username):
         await state.clear()
         return
     doc = message.document
     if not doc or not doc.file_name or not doc.file_name.lower().endswith(".txt"):
-        await message.answer("❌ Нужен файл `.txt`. Отмена: /cancel")
+        await message.answer("❌ Файл — только `.txt` (или пришлите текст сообщением). Отмена: /cancel")
         return
     if doc.file_size and doc.file_size > 2 * 1024 * 1024:
         await message.answer("❌ Файл слишком большой (макс. 2 МБ).")
@@ -170,8 +150,28 @@ async def onboarding_edit_document(message: Message, state: FSMContext, bot: Bot
     await state.clear()
 
 
-@router.message(OnboardingAdminStates.waiting_txt_file, F.text)
-async def onboarding_edit_deny_text(message: Message) -> None:
+@router.message(OnboardingAdminStates.waiting_content, F.text)
+async def onboarding_edit_text(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id, message.from_user.username):
+        await state.clear()
+        return
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("❌ Пустое сообщение. Отмена: /cancel")
+        return
+    try:
+        save_onboarding_text(text)
+        await message.answer(f"✅ Приветствие обновлено ({len(text)} символов).")
+    except ValueError as e:
+        await message.answer(f"❌ {e}")
+    except Exception as e:
+        logger.error("onboarding save: %s", e, exc_info=True)
+        await message.answer("❌ Ошибка при сохранении.")
+    await state.clear()
+
+
+@router.message(OnboardingAdminStates.waiting_content)
+async def onboarding_edit_unsupported(message: Message) -> None:
     if not is_admin(message.from_user.id, message.from_user.username):
         return
-    await message.answer("❌ Пришлите файл `.txt` (UTF-8). Отмена: /cancel")
+    await message.answer("❌ Пришлите текст сообщением или файл `.txt`. Отмена: /cancel")

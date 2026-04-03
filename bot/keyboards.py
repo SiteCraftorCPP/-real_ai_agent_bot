@@ -218,8 +218,8 @@ def get_onboarding_admin_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👀 Показать в Telegram", callback_data="admin:onboarding:full")],
-            [InlineKeyboardButton(text="📥 Скачать .txt", callback_data="admin:onboarding:download")],
-            [InlineKeyboardButton(text="✏️ Заменить (.txt)", callback_data="admin:onboarding:edit")],
+            [InlineKeyboardButton(text="📥 Скачать файл", callback_data="admin:onboarding:download")],
+            [InlineKeyboardButton(text="✏️ Заменить", callback_data="admin:onboarding:edit")],
             [InlineKeyboardButton(text="« В админ-панель", callback_data="admin:onboarding:back")],
         ]
     )
